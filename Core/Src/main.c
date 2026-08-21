@@ -42,7 +42,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "dbg_trace.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -148,6 +148,13 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  while (1)
+  {
+    HAL_I2C_IsDeviceReady(&hi2c1, (0x76 << 1), 1, 5);
+    APP_DBG_MSG("err=0x%08lX\r\n", (unsigned long)HAL_I2C_GetError(&hi2c1));
+    HAL_Delay(1000);
+  }
+    /* -------------------------------------------------------------------- */
 	while(1)
 	{
     /* USER CODE END WHILE */
