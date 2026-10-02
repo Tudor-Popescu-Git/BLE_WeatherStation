@@ -29,10 +29,16 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include "hw_if.h"
+
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+
+#define ENV_PERIOD_TICKS  (2u * 1000u * 1000u / CFG_TS_TICK_VAL)   /* 2 s    */
+#define ENV_CONV_TICKS    (100u * 1000u / CFG_TS_TICK_VAL)         /* 100 ms */
+
  typedef struct{
     uint8_t             Device_Led_Selection;
     uint8_t             Led1;
@@ -69,7 +75,8 @@ typedef struct
  */
 
 static P2P_Server_App_Context_t P2P_Server_App_Context;
-
+static uint16_t EssSvcHdle, EssTempCharHdle, EssHumCharHdle, EssPressCharHdle;
+static uint8_t  EnvPeriodTimerId, EnvConvTimerId;
 /**
  * END of Section BLE_APP_CONTEXT
  */
@@ -77,6 +84,12 @@ static P2P_Server_App_Context_t P2P_Server_App_Context;
 
 /* Private function prototypes -----------------------------------------------*/
 /* USER CODE BEGIN PFP */
+static void ESS_Init(void);
+static void ENV_Period_Cb(void);
+static void ENV_Conv_Cb(void);
+static void ENV_Trigger_Task(void);
+static void ENV_Read_Task(void);
+
 static void P2PS_Send_Notification(void);
 static void P2PS_APP_LED_BUTTON_context_Init(void);
 /* USER CODE END PFP */
@@ -302,6 +315,9 @@ void P2PS_APP_Init(void)
    */
   P2P_Server_App_Context.Notification_Status=0; 
   P2PS_APP_LED_BUTTON_context_Init();
+
+  ESS_Init();
+
 /* USER CODE END P2PS_APP_Init */
   return;
 }
@@ -382,6 +398,91 @@ void P2PS_Send_Notification(void)
    }
 
   return;
+}
+
+static void ESS_Init(void)
+{
+  Service_UUID_t svc_uuid;
+  Char_UUID_t    chr_uuid;
+  tBleStatus     ret;
+
+  svc_uuid.Service_UUID_16 = 0x181A;                     /* Environmental Sensing */
+  ret = aci_gatt_add_service(UUID_TYPE_16, &svc_uuid, PRIMARY_SERVICE,
+                             1 + 3 * 3, &EssSvcHdle);
+  APP_DBG_MSG("ESS service: 0x%02X\r\n", ret);
+
+  chr_uuid.Char_UUID_16 = 0x2A6E;                        /* Temperature: sint16, 0.01 C */
+  ret = aci_gatt_add_char(EssSvcHdle, UUID_TYPE_16, &chr_uuid, 2,
+                          CHAR_PROP_READ | CHAR_PROP_NOTIFY, ATTR_PERMISSION_NONE,
+                          GATT_DONT_NOTIFY_EVENTS, 10, 0, &EssTempCharHdle);
+  APP_DBG_MSG("ESS temp char: 0x%02X\r\n", ret);
+
+  chr_uuid.Char_UUID_16 = 0x2A6F;                        /* Humidity: uint16, 0.01 % */
+  ret = aci_gatt_add_char(EssSvcHdle, UUID_TYPE_16, &chr_uuid, 2,
+                          CHAR_PROP_READ | CHAR_PROP_NOTIFY, ATTR_PERMISSION_NONE,
+                          GATT_DONT_NOTIFY_EVENTS, 10, 0, &EssHumCharHdle);
+  APP_DBG_MSG("ESS hum char: 0x%02X\r\n", ret);
+
+  chr_uuid.Char_UUID_16 = 0x2A6D;                        /* Pressure: uint32, 0.1 Pa */
+  ret = aci_gatt_add_char(EssSvcHdle, UUID_TYPE_16, &chr_uuid, 4,
+                          CHAR_PROP_READ | CHAR_PROP_NOTIFY, ATTR_PERMISSION_NONE,
+                          GATT_DONT_NOTIFY_EVENTS, 10, 0, &EssPressCharHdle);
+  APP_DBG_MSG("ESS press char: 0x%02X\r\n", ret);
+
+  UTIL_SEQ_RegTask(1 << CFG_TASK_ENV_TRIGGER_ID, UTIL_SEQ_RFU, ENV_Trigger_Task);
+  UTIL_SEQ_RegTask(1 << CFG_TASK_ENV_READ_ID,    UTIL_SEQ_RFU, ENV_Read_Task);
+
+  HW_TS_Create(CFG_TIM_PROC_ID_ISR, &EnvPeriodTimerId, hw_ts_Repeated,   ENV_Period_Cb);
+  HW_TS_Create(CFG_TIM_PROC_ID_ISR, &EnvConvTimerId,   hw_ts_SingleShot, ENV_Conv_Cb);
+  HW_TS_Start(EnvPeriodTimerId, ENV_PERIOD_TICKS);
+}
+
+/* Timer callbacks run in interrupt context: only schedule a task, nothing else */
+static void ENV_Period_Cb(void) { UTIL_SEQ_SetTask(1 << CFG_TASK_ENV_TRIGGER_ID, CFG_SCH_PRIO_0); }
+static void ENV_Conv_Cb(void)   { UTIL_SEQ_SetTask(1 << CFG_TASK_ENV_READ_ID,    CFG_SCH_PRIO_0); }
+
+static void ENV_Trigger_Task(void)
+{
+  if (BME680_Trigger() == HAL_OK)
+  {
+    HW_TS_Start(EnvConvTimerId, ENV_CONV_TICKS);
+  }
+  else
+  {
+    APP_DBG_MSG("ENV: trigger failed\r\n");
+  }
+}
+
+static void ENV_Read_Task(void)
+{
+  Env_t   env;
+  uint8_t b[4];
+
+  if (BME680_Read(&env) != HAL_OK)
+  {
+    APP_DBG_MSG("ENV: read failed\r\n");
+    return;
+  }
+
+  int16_t  t  = (int16_t)env.t100;                  /* 0.01 C  */
+  uint16_t rh = (uint16_t)(env.rh1000 / 10);        /* 0.01 %  */
+  uint32_t p  = (uint32_t)env.p_pa * 10u;           /* 0.1 Pa  */
+
+  /* BLE values are little-endian: low byte first */
+  b[0] = (uint8_t)t;  b[1] = (uint8_t)((uint16_t)t >> 8);
+  aci_gatt_update_char_value(EssSvcHdle, EssTempCharHdle, 0, 2, b);
+
+  b[0] = (uint8_t)rh; b[1] = (uint8_t)(rh >> 8);
+  aci_gatt_update_char_value(EssSvcHdle, EssHumCharHdle, 0, 2, b);
+
+  b[0] = (uint8_t)p;  b[1] = (uint8_t)(p >> 8);
+  b[2] = (uint8_t)(p >> 16); b[3] = (uint8_t)(p >> 24);
+  aci_gatt_update_char_value(EssSvcHdle, EssPressCharHdle, 0, 4, b);
+
+  APP_DBG_MSG("ENV T=%ld.%02ld C  RH=%ld.%02ld %%  P=%ld Pa\r\n",
+              (long)(env.t100 / 100), (long)(env.t100 % 100),
+              (long)(env.rh1000 / 1000), (long)((env.rh1000 % 1000) / 10),
+              (long)env.p_pa);
 }
 
 /* USER CODE END FD_LOCAL_FUNCTIONS*/
