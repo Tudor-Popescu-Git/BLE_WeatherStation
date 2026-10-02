@@ -443,7 +443,13 @@ static void ENV_Conv_Cb(void)   { UTIL_SEQ_SetTask(1 << CFG_TASK_ENV_READ_ID,   
 
 static void ENV_Trigger_Task(void)
 {
-  if (BME680_Trigger() == HAL_OK)
+	I2C_HandleTypeDef *hi2c = NULL;
+	if(Export_hi2c(&hi2c) != HAL_OK)
+	{
+	    APP_DBG_MSG("ENV: trigger failed, i2c inst not configured\r\n");
+	    return;
+	}
+  if (BME680_Trigger(hi2c) == HAL_OK)
   {
     HW_TS_Start(EnvConvTimerId, ENV_CONV_TICKS);
   }

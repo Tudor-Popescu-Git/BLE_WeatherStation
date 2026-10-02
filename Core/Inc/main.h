@@ -35,16 +35,12 @@ extern "C" {
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "stm32wbxx_nucleo.h"
+#include "bme680.h"
 /* USER CODE END Includes */
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-typedef struct
-{
-  int32_t t100;     /* temperature, 0.01 C    */
-  int32_t rh1000;   /* humidity,    0.001 %RH */
-  int32_t p_pa;     /* pressure,    Pa        */
-} Env_t;
+
 /* USER CODE END ET */
 
 /* Exported constants --------------------------------------------------------*/
@@ -63,9 +59,9 @@ void MX_LPUART1_UART_Init(void);
 void MX_USART1_UART_Init(void);
 
 /* USER CODE BEGIN EFP */
-HAL_StatusTypeDef BME680_Init(void);
-HAL_StatusTypeDef BME680_Trigger(void);
-HAL_StatusTypeDef BME680_Read(Env_t *env);
+
+HAL_StatusTypeDef Export_hi2c(I2C_HandleTypeDef **hi2c1);
+
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
