@@ -1,5 +1,7 @@
 #include "bme680.h"
 
+#define BME_ADDR  (0x76 << 1)
+
 static uint16_t par_t1, par_p1, par_h1, par_h2;
 static int16_t  par_t2, par_p2, par_p4, par_p5, par_p8, par_p9;
 static int8_t   par_t3, par_p3, par_p6, par_p7, par_h3, par_h4, par_h5, par_h7;
@@ -17,11 +19,10 @@ static HAL_StatusTypeDef bme_wr(uint8_t reg, uint8_t val)
   return HAL_I2C_Mem_Write(hi2c_inst, BME_ADDR, reg, I2C_MEMADD_SIZE_8BIT, &val, 1, 100);
 }
 
-HAL_StatusTypeDef BME680_Init(I2C_HandleTypeDef *hi2c)
+HAL_StatusTypeDef BME680_Init(void)
 {
   uint8_t e[10], k[24];
-  if(hi2c == NULL) {return HAL_ERROR;}
-  hi2c_inst = hi2c;
+  if(hi2c_inst == NULL) {return HAL_ERROR;}
   if (calib_ok) return HAL_OK;
   if (bme_rd(0xE1, e, 10) != HAL_OK) return HAL_ERROR;   /* 0xE1..0xEA */
   if (bme_rd(0x89, k, 24) != HAL_OK) return HAL_ERROR;   /* 0x89..0xA0 */
@@ -55,7 +56,8 @@ HAL_StatusTypeDef BME680_Init(I2C_HandleTypeDef *hi2c)
 
 HAL_StatusTypeDef BME680_Trigger(I2C_HandleTypeDef *hi2c)
 {
-  if (BME680_Init(hi2c)    != HAL_OK) return HAL_ERROR;
+	hi2c_inst = hi2c;
+  if (BME680_Init()    			!= HAL_OK) return HAL_ERROR;
   if (bme_wr(0x70, 0x08)   		!= HAL_OK) return HAL_ERROR;   /* heater off        */
   if (bme_wr(0x71, 0x00)		!= HAL_OK) return HAL_ERROR;   /* no gas            */
   if (bme_wr(0x72, 0x01)		!= HAL_OK) return HAL_ERROR;   /* hum 1x, before 0x74 */

@@ -90,15 +90,10 @@ static void MX_RNG_Init(void);
 static void MX_I2C1_Init(void);
 static void MX_RF_Init(void);
 /* USER CODE BEGIN PFP */
-HAL_StatusTypeDef Export_hi2c(I2C_HandleTypeDef **hi2c1_ptr)
-{
-	*hi2c1_ptr = &hi2c1;
-	return HAL_OK;
-}
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
 /* USER CODE BEGIN 0 */
 
 /* USER CODE END 0 */
@@ -545,7 +540,23 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+HAL_StatusTypeDef Export_hi2c(I2C_HandleTypeDef **hi2c1_ptr)
+{
+  if (hi2c1_ptr == NULL)
+  {
+    return HAL_ERROR;
+  }
 
+  *hi2c1_ptr = &hi2c1;
+
+  /* Not yet initialised by MX_I2C1_Init() */
+  if (hi2c1.State == HAL_I2C_STATE_RESET)
+  {
+    return HAL_ERROR;
+  }
+
+  return HAL_OK;
+}
 /* USER CODE END 4 */
 
 /**
