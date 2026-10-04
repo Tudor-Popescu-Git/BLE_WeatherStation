@@ -8,7 +8,7 @@ by the Cortex-M4, and the readings are exposed over BLE GATT.
 way, what was decided and why, and what remains — so work can resume in a fresh session
 without repeating anything.
 
-_Last updated: 2026-10-03 · latest commit on `main`: `b6614ab`_
+_Last updated: 2026-10-04 · repo `main` is at `b6614ab` plus this README; the history service described in §5 is not yet committed to `main`_
 
 ---
 
@@ -46,9 +46,9 @@ sync is a different mechanism), and anonymous `curl api.github.com` (repo is pri
 | I2C1 bus (PB8/PB9, 100 kHz) | ✅ BME680 ACKs at `0x76`, `chip_id=0x61`, `variant=0x00` |
 | BME680 driver — compensated T / P / RH | ✅ Hand-written, `Core/Src/bme680.c` + `Core/Inc/bme680.h` |
 | BLE Environmental Sensing Service (0x181A) | ✅ Verified in nRF Connect |
-| Periodic measurement via timer server + sequencer | ✅ (period currently **2 s** — to change) |
+| Periodic measurement via timer server + sequencer | ✅ Period `ENV_PERIOD_S` = 10 s (testing value; use 600 in service). First measurement runs at start-up |
 | Sensor header soldered / mechanically secure | 🟨 **Not done** — works only while something presses on it |
-| History buffer + history BLE service on the board | 🟨 Designed and code written in chat (see §5), **not yet in repo** |
+| History buffer + history BLE service on the board | ✅ Built, flashed, transfers work (see §5). Phone-side record contents and reset test still to verify |
 | Android app: download history, upload to server | ⬜ Not started — waits on §5 being verified |
 | BH1750FVI driver (lux) | ⬜ Not wired |
 | Cellular (LTE-M) modem | ⬜ Evaluated, not bought (see §6) |
@@ -135,22 +135,22 @@ Install addresses change per package version — read `Release_Notes.html` every
 
 ---
 
-## Firmware architecture (as on `main`, commit `b6614ab`)
+## Firmware architecture (`main` at `b6614ab` plus the changes in §5)
 
 ```
 RTC-driven timer server (HW_TS)
   ├─ EnvPeriodTimer (repeating, ENV_PERIOD)  → task ENV_TRIGGER: write BME680 config, start conversion
-  └─ EnvConvTimer  (single-shot, 100 ms)    → task ENV_READ:    read, compensate, update GATT, trace
+  └─ EnvConvTimer  (single-shot, 100 ms)    → task ENV_READ:    read, compensate, update GATT, add to history, trace
 Sequencer (UTIL_SEQ) runs the tasks from MX_APPE_Process() in the main loop.
 ```
 
 | File | What's there |
 |---|---|
 | `Core/Src/bme680.c`, `Core/Inc/bme680.h` | Driver: `BME680_Init()`, `BME680_Trigger(hi2c)`, `BME680_Read(Env_t*)` |
-| `Core/Src/main.c` | `Export_hi2c()` in `USER CODE 4` (returns `&hi2c1`, error if not initialised). Main loop is just `MX_APPE_Process()` |
-| `STM32_WPAN/App/p2p_server_app.c` | ESS service, timers, tasks — all inside USER CODE blocks |
-| `Core/Inc/app_conf.h` | Task IDs `CFG_TASK_ENV_TRIGGER_ID`, `CFG_TASK_ENV_READ_ID` in the *with-HCI-command* list |
-| `STM32_WPAN/App/app_ble.c` | `Adv_Cancel()` patch (LP advertising fallback) |
+| `Core/Src/main.c` | `Export_hi2c()` in `USER CODE 4` (returns `&hi2c1`, error if not initialised). Main loop is just `MX_APPE_Process()`. `Error_Handler()` now disables interrupts, lights the red LED and halts |
+| `STM32_WPAN/App/p2p_server_app.c` | ESS service, history service, timers, tasks — all inside USER CODE blocks |
+| `Core/Inc/app_conf.h` | Task IDs `CFG_TASK_ENV_TRIGGER_ID`, `CFG_TASK_ENV_READ_ID`, `CFG_TASK_HIST_SEND_ID` in the *with-HCI-command* list |
+| `STM32_WPAN/App/app_ble.c` | `Adv_Cancel()` patch (LP advertising fallback), and a `BLUE_EVT` case that forwards `ACI_GATT_ATTRIBUTE_MODIFIED` and `ACI_GATT_TX_POOL_AVAILABLE` to `HIST_OnGattEvent(ecode, data)` |
 
 **Rules this structure depends on:**
 - Timer-server callbacks run in **interrupt context** — they may only `UTIL_SEQ_SetTask()`.
@@ -199,10 +199,10 @@ Sequencer (UTIL_SEQ) runs the tasks from MX_APPE_Process() in the main loop.
 - ✅ Include guard in `bme680.h`, header no longer includes BLE app headers.
 - ✅ `bme680.c` moved to `Core/Src` and linked.
 - ✅ Duplicate `USER CODE BEGIN 0` removed.
-- Open: `ENV_Read_Task` prints `read failed` also for `HAL_BUSY` (conversion not
-  finished) — misleading; give it its own message. Failure messages should include
-  `HAL_I2C_GetError(&hi2c1)`.
-- Open: `Error_Handler()` in `main.c` is empty — a failed init would continue silently.
+- ✅ `ENV_Read_Task` reports `HAL_BUSY` as "conversion not finished" and every I2C failure
+  includes `HAL_I2C_GetError()`.
+- ✅ `Error_Handler()` halts with the red LED on. If it lights after flashing, an init call failed.
+- ✅ Negative temperatures print correctly (the old trace printed `-5.-25`).
 
 ---
 
@@ -214,10 +214,8 @@ See the hardware section. Until then every reading depends on something pressing
 
 ### 2. Measurement period
 
-`ENV_PERIOD_TICKS` is 2 s — far too often for a weather station and bad for battery. Use
-a seconds define: `ENV_PERIOD_S` 10 s while testing, 600 s (10 min) in use:
-`#define ENV_PERIOD_TICKS (ENV_PERIOD_S * 1000u * 1000u / CFG_TS_TICK_VAL)`.
-Also trigger one measurement immediately at start-up.
+Done: `ENV_PERIOD_S` define (10 s while testing) and an immediate first measurement at
+start-up. Set it to 600 (10 min) before any unattended run.
 
 ### 3. Getting data off the board — decision record (2026-10-02)
 
@@ -244,18 +242,20 @@ Commands: `0x01` power on, `0x20` one-shot high-res; wait **180 ms max**, read 2
 MSB-first, `lux = raw / 1.2`. Saturates ~54,612 lx. ESS has Illuminance 0x2AFB (uint24,
 0.01 lux) — round to whole lux, the sensor isn't more precise.
 
-### 5. History buffer + history BLE service — code written, not yet committed
+### 5. History buffer + history BLE service — implemented, not yet committed to `main`
 
 Board stores each measurement in a RAM ring buffer; the phone requests everything after
 the last sequence number it has and the board streams it as notifications.
 
-- Buffer: `HIST_CAPACITY` 2016 records × 16 bytes = 32 KB (14 days at 10 min). 192 KB RAM
-  available to the app. Lost on reset/power loss (flash storage is a later option).
+- Buffer: `HIST_CAPACITY` 2016 records × 16 bytes = 32 KB (14 days at 10 min). 192 KB
+  RAM available to the app. Lost on reset/power loss (flash storage is a later option).
 - Each record stores the board's **uptime in seconds**; no clock on the board. The phone
   converts using the end marker's uptime: `time = phone_now − (marker.up_s − rec.up_s)`.
 - Uptime currently from `HAL_GetTick()` with wrap handling. **Only valid while
   `CFG_LPM_SUPPORTED` is 0** (true while tracing is on); SysTick stops in Stop mode, so
-  replace with an RTC-based count before enabling low power.
+  replace with an RTC-based count before enabling low power. A compiler warning flags this.
+- A cycle where the BME680 does not answer adds no record. Sequence numbers stay continuous, so the
+  gap shows as a jump in uptime.
 
 **Service** UUID `7a1e0001-5c2b-4f6e-9b3a-1d2c3e4f5a6b` (byte 12 of the little-endian
 array selects: `01` service, `03` control, `04` data):
@@ -265,16 +265,21 @@ array selects: `01` service, `03` control, `04` data):
 | Control | `7a1e0003-…` | Write, 4 bytes | uint32 LE: first sequence number wanted (0 = all) |
 | Data | `7a1e0004-…` | Notify, 16 bytes | one record per notification |
 
-Record, little-endian: bytes 0–3 sequence (`0xFFFFFFFF` = end marker) · 4–7 uptime s ·
-8–9 temperature 0.01 °C signed · 10–11 RH 0.01 % · 12–15 pressure Pa (in the end marker:
-the board's next sequence number — lower than the phone's last one means the board
-rebooted, so request from 0).
+Record, little-endian, 16 bytes: bytes 0–3 sequence (`0xFFFFFFFF` = end marker) · 4–7 uptime s ·
+8–9 temperature 0.01 °C signed · 10–11 RH 0.01 % · 12–15 pressure Pa. In the end marker,
+bytes 12–15 hold the board's next sequence number — lower than the phone's last one means the
+board rebooted, so request from 0.
+
+Control takes a 4-byte write; any other length is ignored. A request is ignored until
+notifications are enabled on `…0004…`. Streaming stops on disconnect.
 
 **Integration points:**
 - `app_conf.h`: add `CFG_TASK_HIST_SEND_ID` to the with-HCI-command task list.
-- `p2p_server_app.h` (`USER CODE BEGIN EF`): `void HIST_OnGattEvent(void *p_blecore_evt);`
+- `p2p_server_app.h` (`USER CODE BEGIN EF`): `void HIST_OnGattEvent(uint16_t ecode, void *p_data);`
 - `app_ble.c` (`USER CODE BEGIN BLUE_EVT`): forward `ACI_GATT_ATTRIBUTE_MODIFIED_VSEVT_CODE`
-  and `ACI_GATT_TX_POOL_AVAILABLE_VSEVT_CODE` to `HIST_OnGattEvent()`.
+  and `ACI_GATT_TX_POOL_AVAILABLE_VSEVT_CODE` to `HIST_OnGattEvent(p_blecore_evt->ecode,
+  p_blecore_evt->data)`. (`evt_blecore_aci` is not visible in `p2p_server_app.c`, so the two
+  fields are passed instead of the struct.)
 - `p2p_server_app.c`: `HIST_Init()` (service + chars; control char uses
   `GATT_NOTIFY_ATTRIBUTE_WRITE`), `HIST_Add()` called from `ENV_Read_Task`,
   `HIST_Send_Task()` sends until `aci_gatt_update_char_value` returns
@@ -283,9 +288,15 @@ rebooted, so request from 0).
 - Written value handle = char handle + 1; CCCD = char handle + 2.
 
 **Test before any app:** nRF Connect → enable notify on `…0004…` → write byte array
-`00000000` to `…0003…` → PuTTY shows `HIST: request from 0, sending 0..N`, `HIST: done`;
+`00000000` to `…0003…` → PuTTY shows `HIST: request, sending seq 0 to N (N records)`, `HIST: done`;
 phone receives 16-byte values, last one starting `FFFFFFFF`. If PuTTY shows nothing on
 the write, the event isn't reaching `HIST_OnGattEvent`.
+
+**Verified on hardware (2026-10-03, with an earlier build that used 20-byte records; re-test after the change to 16 bytes):** transfers of 23, 50, 54 (from seq 3) and 84 records each
+ended with `HIST: done`; nRF Connect showed the end marker (`FFFFFFFF`, uptime, next sequence).
+**Not yet verified:** the record contents on the phone (compare against the PuTTY lines),
+the reset test (sequence restarts at 0), disconnect and reconnect, and transfers of several
+hundred records (the wait-for-buffer path).
 
 ### 6. Android app (after §5 works)
 
@@ -349,3 +360,9 @@ advertising. LP interval macros: `CFG_LP_CONN_ADV_INTERVAL_MIN/MAX` (1–2.5 s).
   headers: project was copied into the workspace (must stay in place).
 - Windows 260-char path limit can cause "no such file" build errors.
 - Relative humidity depends on the sensor's own temperature: a warmed sensor reads dry.
+- Pasting or typing into PuTTY sends the text to the board. Its stock command parser answers
+  "NOT RECOGNIZED COMMAND" for anything except exactly `SW1`, `SW2`, `SW3`, which simulate the
+  buttons (`SW2` clears the pairing).
+- `ENV: BME680 trigger failed, i2c err 0x04` (NACK) was seen once with the header unsoldered.
+  The cycle is skipped and the next one works; expect occasional gaps until the header is soldered.
+- nRF Connect caches the service list. After flashing new services, refresh or toggle Bluetooth.

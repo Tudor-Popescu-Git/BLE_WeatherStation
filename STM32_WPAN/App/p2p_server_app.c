@@ -29,6 +29,8 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include <stdlib.h>
+#include <string.h>
 #include "hw_if.h"
 
 /* USER CODE END Includes */
@@ -36,8 +38,29 @@
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
 
-#define ENV_PERIOD_TICKS  (2u * 1000u * 1000u / CFG_TS_TICK_VAL)   /* 2 s    */
+/* Measurement period: 10 s for bench testing, set to 600 (10 min) for real use. */
+#define ENV_PERIOD_S      10u
+#define ENV_PERIOD_TICKS  (ENV_PERIOD_S * 1000u * 1000u / CFG_TS_TICK_VAL)
 #define ENV_CONV_TICKS    (100u * 1000u / CFG_TS_TICK_VAL)         /* 100 ms */
+
+/* History buffer */
+#define HIST_CAPACITY     2016u        /* records; 14 days at 10 min */
+#define HIST_REC_SIZE     16u          /* bytes per record = one notification */
+#define HIST_SEQ_MARKER   0xFFFFFFFFu  /* sequence value that marks the end of a transfer */
+
+/* 128-bit UUID 7a1e0001-5c2b-4f6e-9b3a-1d2c3e4f5a6b, little-endian; n = 01 service, 03 control, 04 data */
+#define HIST_UUID128(n)   {0x6b,0x5a,0x4f,0x3e,0x2c,0x1d,0x3a,0x9b,0x6e,0x4f,0x2b,0x5c,(n),0x00,0x1e,0x7a}
+
+typedef struct
+{
+  uint32_t seq;      /* sequence number */
+  uint32_t up_s;     /* board uptime in seconds */
+  int16_t  t100;     /* 0.01 C */
+  uint16_t rh100;    /* 0.01 % */
+  uint32_t p_pa;     /* Pa */
+} HistRec_t;
+
+_Static_assert(sizeof(HistRec_t) == HIST_REC_SIZE, "HistRec_t must be 16 bytes");
 
  typedef struct{
     uint8_t             Device_Led_Selection;
@@ -77,6 +100,18 @@ typedef struct
 static P2P_Server_App_Context_t P2P_Server_App_Context;
 static uint16_t EssSvcHdle, EssTempCharHdle, EssHumCharHdle, EssPressCharHdle;
 static uint8_t  EnvPeriodTimerId, EnvConvTimerId;
+static uint8_t  EnvBmeStarted;                    /* sensor was triggered in this cycle */
+
+/* History */
+static HistRec_t HistBuf[HIST_CAPACITY];
+static uint32_t  HistNextSeq;                     /* sequence number the next record gets */
+static uint16_t  HistSvcHdle, HistCtrlCharHdle, HistDataCharHdle;
+static uint8_t   HistNotifyOn;                    /* phone enabled notifications on the data characteristic */
+static uint8_t   HistStreaming;                   /* a transfer is in progress */
+static uint32_t  HistSendNext, HistSendEnd;       /* next sequence to send / one past the last one to send */
+
+/* Uptime in seconds, built from the 1 kHz HAL tick */
+static uint32_t  UpLastTick, UpRemMs, UpSeconds;
 /**
  * END of Section BLE_APP_CONTEXT
  */
@@ -89,6 +124,14 @@ static void ENV_Period_Cb(void);
 static void ENV_Conv_Cb(void);
 static void ENV_Trigger_Task(void);
 static void ENV_Read_Task(void);
+
+static void     HIST_Init(void);
+static void     HIST_Reset(void);
+static void     HIST_Add(int16_t t100, uint16_t rh100, uint32_t p_pa);
+static void     HIST_StartRequest(uint32_t from);
+static void     HIST_Send_Task(void);
+static uint32_t HIST_Oldest(void);
+static uint32_t UptimeS(void);
 
 static void P2PS_Send_Notification(void);
 static void P2PS_APP_LED_BUTTON_context_Init(void);
@@ -289,7 +332,8 @@ void P2PS_APP_Notification(P2PS_APP_ConnHandle_Not_evt_t *pNotification)
 
     case PEER_DISCON_HANDLE_EVT :
 /* USER CODE BEGIN PEER_DISCON_HANDLE_EVT */
-       P2PS_APP_LED_BUTTON_context_Init();       
+       P2PS_APP_LED_BUTTON_context_Init();
+       HIST_Reset();
 /* USER CODE END PEER_DISCON_HANDLE_EVT */
     break;
 
@@ -317,6 +361,10 @@ void P2PS_APP_Init(void)
   P2PS_APP_LED_BUTTON_context_Init();
 
   ESS_Init();
+  HIST_Init();
+
+  /* First measurement right away, then every ENV_PERIOD_S */
+  UTIL_SEQ_SetTask(1 << CFG_TASK_ENV_TRIGGER_ID, CFG_SCH_PRIO_0);
 
 /* USER CODE END P2PS_APP_Init */
   return;
@@ -400,6 +448,22 @@ void P2PS_Send_Notification(void)
   return;
 }
 
+#if (CFG_LPM_SUPPORTED != 0)
+#warning "UptimeS() uses SysTick, which stops in Stop mode: replace it with an RTC-based count before enabling low power"
+#endif
+
+/* Seconds since boot. Call at least once every 49 days. */
+static uint32_t UptimeS(void)
+{
+  uint32_t now = HAL_GetTick();
+
+  UpRemMs   += (uint32_t)(now - UpLastTick);
+  UpLastTick = now;
+  UpSeconds += UpRemMs / 1000u;
+  UpRemMs   %= 1000u;
+  return UpSeconds;
+}
+
 static void ESS_Init(void)
 {
   Service_UUID_t svc_uuid;
@@ -429,6 +493,7 @@ static void ESS_Init(void)
                           GATT_DONT_NOTIFY_EVENTS, 10, 0, &EssPressCharHdle);
   APP_DBG_MSG("ESS press char: 0x%02X\r\n", ret);
 
+
   UTIL_SEQ_RegTask(1 << CFG_TASK_ENV_TRIGGER_ID, UTIL_SEQ_RFU, ENV_Trigger_Task);
   UTIL_SEQ_RegTask(1 << CFG_TASK_ENV_READ_ID,    UTIL_SEQ_RFU, ENV_Read_Task);
 
@@ -441,54 +506,307 @@ static void ESS_Init(void)
 static void ENV_Period_Cb(void) { UTIL_SEQ_SetTask(1 << CFG_TASK_ENV_TRIGGER_ID, CFG_SCH_PRIO_0); }
 static void ENV_Conv_Cb(void)   { UTIL_SEQ_SetTask(1 << CFG_TASK_ENV_READ_ID,    CFG_SCH_PRIO_0); }
 
+/* Writes an unsigned little-endian value of len (1..4) bytes to an ESS characteristic */
+static void ESS_Update(uint16_t char_hdl, uint8_t len, uint32_t value)
+{
+  uint8_t    b[4];
+  uint8_t    i;
+  tBleStatus ret;
+
+  for (i = 0; i < len; i++)
+  {
+    b[i] = (uint8_t)(value >> (8u * i));
+  }
+  ret = aci_gatt_update_char_value(EssSvcHdle, char_hdl, 0, len, b);
+  if (ret != BLE_STATUS_SUCCESS)
+  {
+    APP_DBG_MSG("ENV: update of char 0x%04X failed: 0x%02X\r\n", char_hdl, ret);
+  }
+}
+
 static void ENV_Trigger_Task(void)
 {
-	I2C_HandleTypeDef *hi2c = NULL;
-	if(Export_hi2c(&hi2c) != HAL_OK)
-	{
-	    APP_DBG_MSG("ENV: trigger failed, i2c inst not configured\r\n");
-	    return;
-	}
+  I2C_HandleTypeDef *hi2c = NULL;
+
+  if (Export_hi2c(&hi2c) != HAL_OK)
+  {
+    APP_DBG_MSG("ENV: trigger failed, i2c inst not configured\r\n");
+    return;
+  }
+
   if (BME680_Trigger(hi2c) == HAL_OK)
   {
+    EnvBmeStarted = 1u;
     HW_TS_Start(EnvConvTimerId, ENV_CONV_TICKS);
   }
   else
   {
-    APP_DBG_MSG("ENV: trigger failed\r\n");
+    EnvBmeStarted = 0u;
+    APP_DBG_MSG("ENV: trigger failed, i2c err 0x%02lX\r\n", (unsigned long)HAL_I2C_GetError(hi2c));
   }
 }
 
 static void ENV_Read_Task(void)
 {
-  Env_t   env;
-  uint8_t b[4];
+  Env_t              env;
+  HAL_StatusTypeDef  st;
+  I2C_HandleTypeDef *hi2c = NULL;
+  int16_t            t;
+  uint16_t           rh;
+  uint32_t           p;
+  const char        *sign;
+  long               ta;
 
-  if (BME680_Read(&env) != HAL_OK)
+  if (!EnvBmeStarted)
   {
-    APP_DBG_MSG("ENV: read failed\r\n");
+    return;
+  }
+  EnvBmeStarted = 0u;
+
+  if (Export_hi2c(&hi2c) != HAL_OK)
+  {
+    APP_DBG_MSG("ENV: read failed, i2c inst not configured\r\n");
     return;
   }
 
-  int16_t  t  = (int16_t)env.t100;                  /* 0.01 C  */
-  uint16_t rh = (uint16_t)(env.rh1000 / 10);        /* 0.01 %  */
-  uint32_t p  = (uint32_t)env.p_pa * 10u;           /* 0.1 Pa  */
+  st = BME680_Read(&env);
+  if (st == HAL_BUSY)
+  {
+    APP_DBG_MSG("ENV: conversion not finished\r\n");
+    return;
+  }
+  if (st != HAL_OK)
+  {
+    APP_DBG_MSG("ENV: read failed, i2c err 0x%02lX\r\n", (unsigned long)HAL_I2C_GetError(hi2c));
+    return;
+  }
 
-  /* BLE values are little-endian: low byte first */
-  b[0] = (uint8_t)t;  b[1] = (uint8_t)((uint16_t)t >> 8);
-  aci_gatt_update_char_value(EssSvcHdle, EssTempCharHdle, 0, 2, b);
+  t    = (int16_t)env.t100;                /* 0.01 C */
+  rh   = (uint16_t)(env.rh1000 / 10);      /* 0.01 % */
+  p    = (uint32_t)env.p_pa * 10u;         /* 0.1 Pa */
+  sign = (env.t100 < 0) ? "-" : "";
+  ta   = labs((long)env.t100);
 
-  b[0] = (uint8_t)rh; b[1] = (uint8_t)(rh >> 8);
-  aci_gatt_update_char_value(EssSvcHdle, EssHumCharHdle, 0, 2, b);
+  ESS_Update(EssTempCharHdle,  2, (uint16_t)t);
+  ESS_Update(EssHumCharHdle,   2, rh);
+  ESS_Update(EssPressCharHdle, 4, p);
 
-  b[0] = (uint8_t)p;  b[1] = (uint8_t)(p >> 8);
-  b[2] = (uint8_t)(p >> 16); b[3] = (uint8_t)(p >> 24);
-  aci_gatt_update_char_value(EssSvcHdle, EssPressCharHdle, 0, 4, b);
-
-  APP_DBG_MSG("ENV T=%ld.%02ld C  RH=%ld.%02ld %%  P=%ld Pa\r\n",
-              (long)(env.t100 / 100), (long)(env.t100 % 100),
+  APP_DBG_MSG("ENV T=%s%ld.%02ld C  RH=%ld.%02ld %%  P=%ld Pa\r\n",
+              sign, ta / 100, ta % 100,
               (long)(env.rh1000 / 1000), (long)((env.rh1000 % 1000) / 10),
               (long)env.p_pa);
+
+  HIST_Add(t, rh, (uint32_t)env.p_pa);
+}
+
+/*************************************************************
+ * History buffer and history GATT service
+ *************************************************************/
+static void HIST_Put16(uint8_t *b, uint16_t v)
+{
+  b[0] = (uint8_t)v;
+  b[1] = (uint8_t)(v >> 8);
+}
+
+static void HIST_Put32(uint8_t *b, uint32_t v)
+{
+  b[0] = (uint8_t)v;
+  b[1] = (uint8_t)(v >> 8);
+  b[2] = (uint8_t)(v >> 16);
+  b[3] = (uint8_t)(v >> 24);
+}
+
+/* Record layout, little-endian: seq(4) up_s(4) t100(2) rh100(2) p_pa(4) */
+static void HIST_Pack(const HistRec_t *r, uint8_t *b)
+{
+  HIST_Put32(&b[0],  r->seq);
+  HIST_Put32(&b[4],  r->up_s);
+  HIST_Put16(&b[8],  (uint16_t)r->t100);
+  HIST_Put16(&b[10], r->rh100);
+  HIST_Put32(&b[12], r->p_pa);
+}
+
+static uint32_t HIST_Oldest(void)
+{
+  return (HistNextSeq > HIST_CAPACITY) ? (HistNextSeq - HIST_CAPACITY) : 0u;
+}
+
+static void HIST_Add(int16_t t100, uint16_t rh100, uint32_t p_pa)
+{
+  HistRec_t *r = &HistBuf[HistNextSeq % HIST_CAPACITY];
+
+  r->seq   = HistNextSeq;
+  r->up_s  = UptimeS();
+  r->t100  = t100;
+  r->rh100 = rh100;
+  r->p_pa  = p_pa;
+  HistNextSeq++;
+}
+
+static void HIST_Init(void)
+{
+  static const uint8_t uuid_svc[16]  = HIST_UUID128(0x01);
+  static const uint8_t uuid_ctrl[16] = HIST_UUID128(0x03);
+  static const uint8_t uuid_data[16] = HIST_UUID128(0x04);
+  Service_UUID_t svc_uuid;
+  Char_UUID_t    chr_uuid;
+  tBleStatus     ret;
+
+  memcpy(svc_uuid.Service_UUID_128, uuid_svc, 16);
+  ret = aci_gatt_add_service(UUID_TYPE_128, &svc_uuid, PRIMARY_SERVICE,
+                             1 + 2 + 3, &HistSvcHdle);
+  APP_DBG_MSG("HIST service: 0x%02X\r\n", ret);
+
+  memcpy(chr_uuid.Char_UUID_128, uuid_ctrl, 16);          /* control: uint32 LE, first sequence wanted */
+  ret = aci_gatt_add_char(HistSvcHdle, UUID_TYPE_128, &chr_uuid, 4,
+                          CHAR_PROP_WRITE, ATTR_PERMISSION_NONE,
+                          GATT_NOTIFY_ATTRIBUTE_WRITE, 10, 0, &HistCtrlCharHdle);
+  APP_DBG_MSG("HIST control char: 0x%02X\r\n", ret);
+
+  memcpy(chr_uuid.Char_UUID_128, uuid_data, 16);          /* data: one record per notification */
+  ret = aci_gatt_add_char(HistSvcHdle, UUID_TYPE_128, &chr_uuid, HIST_REC_SIZE,
+                          CHAR_PROP_NOTIFY, ATTR_PERMISSION_NONE,
+                          GATT_NOTIFY_ATTRIBUTE_WRITE, 10, 0, &HistDataCharHdle);
+  APP_DBG_MSG("HIST data char: 0x%02X\r\n", ret);
+
+  UTIL_SEQ_RegTask(1 << CFG_TASK_HIST_SEND_ID, UTIL_SEQ_RFU, HIST_Send_Task);
+
+  UpLastTick = HAL_GetTick();
+}
+
+static void HIST_Reset(void)
+{
+  HistStreaming = 0u;
+  HistNotifyOn  = 0u;
+}
+
+static void HIST_StartRequest(uint32_t from)
+{
+  uint32_t oldest = HIST_Oldest();
+
+  if (!HistNotifyOn)
+  {
+    APP_DBG_MSG("HIST: request ignored, notifications not enabled\r\n");
+    return;
+  }
+
+  if (from < oldest)       { from = oldest; }
+  if (from > HistNextSeq)  { from = HistNextSeq; }
+
+  HistSendNext  = from;
+  HistSendEnd   = HistNextSeq;
+  HistStreaming = 1u;
+
+  APP_DBG_MSG("HIST: request, sending seq %lu to %lu (%lu records)\r\n",
+              (unsigned long)HistSendNext, (unsigned long)HistSendEnd,
+              (unsigned long)(HistSendEnd - HistSendNext));
+
+  UTIL_SEQ_SetTask(1 << CFG_TASK_HIST_SEND_ID, CFG_SCH_PRIO_0);
+}
+
+/* Sends records until the BLE TX pool is full, then waits for ACI_GATT_TX_POOL_AVAILABLE */
+static void HIST_Send_Task(void)
+{
+  uint8_t    b[HIST_REC_SIZE];
+  tBleStatus ret;
+
+  if (!HistStreaming || !HistNotifyOn)
+  {
+    HistStreaming = 0u;
+    return;
+  }
+
+  while (HistSendNext < HistSendEnd)
+  {
+    if (HistSendNext < HIST_Oldest())          /* overwritten while sending */
+    {
+      HistSendNext = HIST_Oldest();
+      continue;
+    }
+
+    HIST_Pack(&HistBuf[HistSendNext % HIST_CAPACITY], b);
+    ret = aci_gatt_update_char_value(HistSvcHdle, HistDataCharHdle, 0, HIST_REC_SIZE, b);
+    if (ret == BLE_STATUS_INSUFFICIENT_RESOURCES)
+    {
+      return;                                  /* resumes from HIST_OnGattEvent */
+    }
+    if (ret != BLE_STATUS_SUCCESS)
+    {
+      APP_DBG_MSG("HIST: send failed at seq %lu: 0x%02X\r\n", (unsigned long)HistSendNext, ret);
+      HistStreaming = 0u;
+      return;
+    }
+    HistSendNext++;
+  }
+
+  /* End marker: seq = 0xFFFFFFFF, uptime now, pressure field = next sequence number */
+  memset(b, 0, sizeof(b));
+  HIST_Put32(&b[0],  HIST_SEQ_MARKER);
+  HIST_Put32(&b[4],  UptimeS());
+  HIST_Put32(&b[12], HistNextSeq);
+  ret = aci_gatt_update_char_value(HistSvcHdle, HistDataCharHdle, 0, HIST_REC_SIZE, b);
+  if (ret == BLE_STATUS_INSUFFICIENT_RESOURCES)
+  {
+    return;
+  }
+
+  HistStreaming = 0u;
+  if (ret == BLE_STATUS_SUCCESS)
+  {
+    APP_DBG_MSG("HIST: done\r\n");
+  }
+  else
+  {
+    APP_DBG_MSG("HIST: end marker failed: 0x%02X\r\n", ret);
+  }
+}
+
+/* Called from SVCCTL_App_Notification() (app_ble.c). Event context: only set state and schedule tasks. */
+void HIST_OnGattEvent(uint16_t ecode, void *p_data)
+{
+  switch (ecode)
+  {
+    case ACI_GATT_ATTRIBUTE_MODIFIED_VSEVT_CODE:
+    {
+      aci_gatt_attribute_modified_event_rp0 *m = (aci_gatt_attribute_modified_event_rp0 *)p_data;
+
+      if (m->Attr_Handle == (uint16_t)(HistDataCharHdle + 2u))          /* data char CCCD */
+      {
+        HistNotifyOn = (m->Attr_Data_Length >= 1u) && ((m->Attr_Data[0] & 0x01u) != 0u);
+        if (!HistNotifyOn)
+        {
+          HistStreaming = 0u;
+        }
+        APP_DBG_MSG("HIST: notifications %s\r\n", HistNotifyOn ? "enabled" : "disabled");
+      }
+      else if (m->Attr_Handle == (uint16_t)(HistCtrlCharHdle + 1u))     /* control char value */
+      {
+        if (m->Attr_Data_Length == 4u)
+        {
+          uint32_t from = (uint32_t)m->Attr_Data[0]
+                        | ((uint32_t)m->Attr_Data[1] << 8)
+                        | ((uint32_t)m->Attr_Data[2] << 16)
+                        | ((uint32_t)m->Attr_Data[3] << 24);
+          HIST_StartRequest(from);
+        }
+        else
+        {
+          APP_DBG_MSG("HIST: control write ignored, length %u\r\n", (unsigned)m->Attr_Data_Length);
+        }
+      }
+      break;
+    }
+
+    case ACI_GATT_TX_POOL_AVAILABLE_VSEVT_CODE:
+      if (HistStreaming)
+      {
+        UTIL_SEQ_SetTask(1 << CFG_TASK_HIST_SEND_ID, CFG_SCH_PRIO_0);
+      }
+      break;
+
+    default:
+      break;
+  }
 }
 
 /* USER CODE END FD_LOCAL_FUNCTIONS*/

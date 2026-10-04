@@ -69,6 +69,7 @@ typedef struct
   void P2PS_APP_Notification( P2PS_APP_ConnHandle_Not_evt_t *pNotification );
 /* USER CODE BEGIN EF */
   void P2PS_APP_SW1_Button_Action( void );
+  void HIST_OnGattEvent( uint16_t ecode, void *p_data );
 
 /* USER CODE END EF */
 

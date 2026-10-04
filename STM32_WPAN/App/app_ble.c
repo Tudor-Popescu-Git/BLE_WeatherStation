@@ -831,7 +831,10 @@ SVCCTL_UserEvtFlowStatus_t SVCCTL_App_Notification(void *p_Pckt)
         break;
 
         /* USER CODE BEGIN BLUE_EVT */
-
+        case ACI_GATT_ATTRIBUTE_MODIFIED_VSEVT_CODE:
+        case ACI_GATT_TX_POOL_AVAILABLE_VSEVT_CODE:
+          HIST_OnGattEvent(p_blecore_evt->ecode, p_blecore_evt->data);
+          break;
         /* USER CODE END BLUE_EVT */
       }
       break; /* HCI_VENDOR_SPECIFIC_DEBUG_EVT_CODE */
