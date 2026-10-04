@@ -48,8 +48,8 @@ sync is a different mechanism), and anonymous `curl api.github.com` (repo is pri
 | BLE Environmental Sensing Service (0x181A) | ✅ Verified in nRF Connect |
 | Periodic measurement via timer server + sequencer | ✅ Period `ENV_PERIOD_S` = 10 s (testing value; use 600 in service). First measurement runs at start-up |
 | Sensor header soldered / mechanically secure | 🟨 **Not done** — works only while something presses on it |
-| History buffer + history BLE service on the board | ✅ Built, flashed, transfers work (see §5). Phone-side record contents and reset test still to verify |
-| Android app: download history, upload to server | ⬜ Not started — waits on §5 being verified |
+| History buffer + history BLE service on the board | ✅ Built, flashed and verified on hardware with nRF Connect (see §5). Ring wrap and long unattended runs not yet tested on hardware |
+| Android app: download history, upload to server | ⬜ Not started — next step now that §5 is verified |
 | BH1750FVI driver (lux) | ⬜ Not wired |
 | Cellular (LTE-M) modem | ⬜ Evaluated, not bought (see §6) |
 | Battery operation | ⬜ Not started |
@@ -271,7 +271,10 @@ bytes 12–15 hold the board's next sequence number — lower than the phone's l
 board rebooted, so request from 0.
 
 Control takes a 4-byte write; any other length is ignored. A request is ignored until
-notifications are enabled on `…0004…`. Streaming stops on disconnect.
+notifications are enabled on `…0004…` (PuTTY: `HIST: request ignored, notifications not enabled`).
+Streaming stops on disconnect, and the board forgets the notification setting: **enable
+notifications on `…0004…` again after every reconnect**, then write the request.
+In nRF Connect the first byte written is the lowest one: sequence 157 is `9D-00-00-00`.
 
 **Integration points:**
 - `app_conf.h`: add `CFG_TASK_HIST_SEND_ID` to the with-HCI-command task list.
@@ -292,11 +295,25 @@ notifications are enabled on `…0004…`. Streaming stops on disconnect.
 phone receives 16-byte values, last one starting `FFFFFFFF`. If PuTTY shows nothing on
 the write, the event isn't reaching `HIST_OnGattEvent`.
 
-**Verified on hardware (2026-10-03, with an earlier build that used 20-byte records; re-test after the change to 16 bytes):** transfers of 23, 50, 54 (from seq 3) and 84 records each
-ended with `HIST: done`; nRF Connect showed the end marker (`FFFFFFFF`, uptime, next sequence).
-**Not yet verified:** the record contents on the phone (compare against the PuTTY lines),
-the reset test (sequence restarts at 0), disconnect and reconnect, and transfers of several
-hundred records (the wait-for-buffer path).
+**Verified on hardware (2026-10-04, 16-byte build, nRF Connect + PuTTY):**
+- Request from sequence 157: 30 records (157 to 186) in order, then the end marker
+  (uptime 1880 s, next sequence 187). Record values matched the live ESS readings.
+- Full transfers (`00-00-00-00`): 275 and 329 records, no gaps or repeats, marker last. The
+  second transfer's first 275 records were byte-for-byte identical to the first.
+- Request after a disconnect and reconnect works once notifications are enabled again; without
+  that step the request is ignored, as designed.
+- After a reflash/reset the buffer is empty and the sequence restarts at 0; the marker's next
+  sequence (lower than before) and uptime show this.
+- Disconnect in the middle of a transfer, using a temporary test build that paused each transfer
+  after 10 records for 350 to 360 s (not part of the repo): nothing was sent after the disconnect,
+  measurements continued, and a new request restarted cleanly from 0, also while an earlier pause
+  was still pending. Staying connected through the pause: the remaining records (10 to 36) and the
+  marker arrived 355 s after the request, with a contiguous sequence.
+
+**Not yet verified on hardware:** the ring buffer wrapping at 2016 records (checked only in the
+off-target test), whether the wait-for-buffer path (`BLE_STATUS_INSUFFICIENT_RESOURCES`) is ever
+reached on the board (the firmware does not log it), runs at `ENV_PERIOD_S` 600, and low-power mode
+(uptime needs an RTC-based count).
 
 ### 6. Android app (after §5 works)
 
