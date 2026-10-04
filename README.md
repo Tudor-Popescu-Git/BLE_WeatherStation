@@ -8,7 +8,7 @@ by the Cortex-M4, and the readings are exposed over BLE GATT.
 way, what was decided and why, and what remains — so work can resume in a fresh session
 without repeating anything.
 
-_Last updated: 2026-10-04 · repo `main` is at `b6614ab` plus this README; the history service described in §5 is not yet committed to `main`_
+_Last updated: 2026-10-04 · repo `main` includes the history service described in §5 (commit `977348c`)_
 
 ---
 
@@ -135,7 +135,7 @@ Install addresses change per package version — read `Release_Notes.html` every
 
 ---
 
-## Firmware architecture (`main` at `b6614ab` plus the changes in §5)
+## Firmware architecture (`main`, including the history service in §5)
 
 ```
 RTC-driven timer server (HW_TS)
@@ -242,7 +242,7 @@ Commands: `0x01` power on, `0x20` one-shot high-res; wait **180 ms max**, read 2
 MSB-first, `lux = raw / 1.2`. Saturates ~54,612 lx. ESS has Illuminance 0x2AFB (uint24,
 0.01 lux) — round to whole lux, the sensor isn't more precise.
 
-### 5. History buffer + history BLE service — implemented, not yet committed to `main`
+### 5. History buffer + history BLE service — implemented and verified on hardware
 
 Board stores each measurement in a RAM ring buffer; the phone requests everything after
 the last sequence number it has and the board streams it as notifications.
