@@ -72,10 +72,12 @@ void HAL_MspInit(void)
   __HAL_RCC_HSEM_CLK_ENABLE();
 
   /* System interrupt init*/
+  /* PendSV_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(PendSV_IRQn, 15, 0);
 
   /* Peripheral interrupt init */
   /* HSEM_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(HSEM_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(HSEM_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(HSEM_IRQn);
 
   /* USER CODE BEGIN MspInit 1 */
@@ -177,9 +179,9 @@ void HAL_IPCC_MspInit(IPCC_HandleTypeDef* hipcc)
     /* Peripheral clock enable */
     __HAL_RCC_IPCC_CLK_ENABLE();
     /* IPCC interrupt Init */
-    HAL_NVIC_SetPriority(IPCC_C1_RX_IRQn, 0, 0);
+    HAL_NVIC_SetPriority(IPCC_C1_RX_IRQn, 5, 0);
     HAL_NVIC_EnableIRQ(IPCC_C1_RX_IRQn);
-    HAL_NVIC_SetPriority(IPCC_C1_TX_IRQn, 0, 0);
+    HAL_NVIC_SetPriority(IPCC_C1_TX_IRQn, 5, 0);
     HAL_NVIC_EnableIRQ(IPCC_C1_TX_IRQn);
     /* USER CODE BEGIN IPCC_MspInit 1 */
 
@@ -285,7 +287,7 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
     __HAL_LINKDMA(huart,hdmatx,hdma_lpuart1_tx);
 
     /* LPUART1 interrupt Init */
-    HAL_NVIC_SetPriority(LPUART1_IRQn, 0, 0);
+    HAL_NVIC_SetPriority(LPUART1_IRQn, 5, 0);
     HAL_NVIC_EnableIRQ(LPUART1_IRQn);
     /* USER CODE BEGIN LPUART1_MspInit 1 */
 
@@ -340,7 +342,7 @@ void HAL_UART_MspInit(UART_HandleTypeDef* huart)
     __HAL_LINKDMA(huart,hdmatx,hdma_usart1_tx);
 
     /* USART1 interrupt Init */
-    HAL_NVIC_SetPriority(USART1_IRQn, 0, 0);
+    HAL_NVIC_SetPriority(USART1_IRQn, 5, 0);
     HAL_NVIC_EnableIRQ(USART1_IRQn);
     /* USER CODE BEGIN USART1_MspInit 1 */
 
@@ -490,7 +492,7 @@ void HAL_RTC_MspInit(RTC_HandleTypeDef* hrtc)
     __HAL_RCC_RTC_ENABLE();
     __HAL_RCC_RTCAPB_CLK_ENABLE();
     /* RTC interrupt Init */
-    HAL_NVIC_SetPriority(RTC_WKUP_IRQn, 0, 0);
+    HAL_NVIC_SetPriority(RTC_WKUP_IRQn, 5, 0);
     HAL_NVIC_EnableIRQ(RTC_WKUP_IRQn);
     /* USER CODE BEGIN RTC_MspInit 1 */
   HAL_RTCEx_EnableBypassShadow(hrtc);

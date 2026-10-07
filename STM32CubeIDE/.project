@@ -152,6 +152,16 @@
 			<locationURI>PARENT-6-PROJECT_LOC/Drivers/STM32WBxx_HAL_Driver/Src/stm32wbxx_hal_rtc_ex.c</locationURI>
 		</link>
 		<link>
+			<name>Drivers/STM32WBxx_HAL_Driver/stm32wbxx_hal_tim.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/Drivers/STM32WBxx_HAL_Driver/Src/stm32wbxx_hal_tim.c</locationURI>
+		</link>
+		<link>
+			<name>Drivers/STM32WBxx_HAL_Driver/stm32wbxx_hal_tim_ex.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/Drivers/STM32WBxx_HAL_Driver/Src/stm32wbxx_hal_tim_ex.c</locationURI>
+		</link>
+		<link>
 			<name>Drivers/STM32WBxx_HAL_Driver/stm32wbxx_hal_uart.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/Drivers/STM32WBxx_HAL_Driver/Src/stm32wbxx_hal_uart.c</locationURI>
@@ -165,6 +175,56 @@
 			<name>Drivers/STM32WBxx_HAL_Driver/stm32wbxx_ll_rcc.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/Drivers/STM32WBxx_HAL_Driver/Src/stm32wbxx_ll_rcc.c</locationURI>
+		</link>
+		<link>
+			<name>Middlewares/FreeRTOS/cmsis_os2.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.c</locationURI>
+		</link>
+		<link>
+			<name>Middlewares/FreeRTOS/croutine.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/Middlewares/Third_Party/FreeRTOS/Source/croutine.c</locationURI>
+		</link>
+		<link>
+			<name>Middlewares/FreeRTOS/event_groups.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/Middlewares/Third_Party/FreeRTOS/Source/event_groups.c</locationURI>
+		</link>
+		<link>
+			<name>Middlewares/FreeRTOS/heap_4.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/Middlewares/Third_Party/FreeRTOS/Source/portable/MemMang/heap_4.c</locationURI>
+		</link>
+		<link>
+			<name>Middlewares/FreeRTOS/list.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/Middlewares/Third_Party/FreeRTOS/Source/list.c</locationURI>
+		</link>
+		<link>
+			<name>Middlewares/FreeRTOS/port.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/Middlewares/Third_Party/FreeRTOS/Source/portable/GCC/ARM_CM4F/port.c</locationURI>
+		</link>
+		<link>
+			<name>Middlewares/FreeRTOS/queue.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/Middlewares/Third_Party/FreeRTOS/Source/queue.c</locationURI>
+		</link>
+		<link>
+			<name>Middlewares/FreeRTOS/stream_buffer.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/Middlewares/Third_Party/FreeRTOS/Source/stream_buffer.c</locationURI>
+		</link>
+		<link>
+			<name>Middlewares/FreeRTOS/tasks.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/Middlewares/Third_Party/FreeRTOS/Source/tasks.c</locationURI>
+		</link>
+		<link>
+			<name>Middlewares/FreeRTOS/timers.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/Middlewares/Third_Party/FreeRTOS/Source/timers.c</locationURI>
 		</link>
 		<link>
 			<name>Middlewares/STM32_WPAN/ble_gap_aci.c</name>
@@ -197,6 +257,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/Middlewares/ST/STM32_WPAN/utilities/dbg_trace.c</locationURI>
 		</link>
 		<link>
+			<name>Middlewares/STM32_WPAN/dis.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/Middlewares/ST/STM32_WPAN/ble/svc/Src/dis.c</locationURI>
+		</link>
+		<link>
 			<name>Middlewares/STM32_WPAN/hci_tl.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/Middlewares/ST/STM32_WPAN/interface/patterns/ble_thread/tl/hci_tl.c</locationURI>
@@ -207,6 +272,11 @@
 			<locationURI>PARENT-6-PROJECT_LOC/Middlewares/ST/STM32_WPAN/interface/patterns/ble_thread/tl/hci_tl_if.c</locationURI>
 		</link>
 		<link>
+			<name>Middlewares/STM32_WPAN/hrs.c</name>
+			<type>1</type>
+			<locationURI>PARENT-6-PROJECT_LOC/Middlewares/ST/STM32_WPAN/ble/svc/Src/hrs.c</locationURI>
+		</link>
+		<link>
 			<name>Middlewares/STM32_WPAN/osal.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/Middlewares/ST/STM32_WPAN/ble/core/template/osal.c</locationURI>
@@ -215,11 +285,6 @@
 			<name>Middlewares/STM32_WPAN/otp.c</name>
 			<type>1</type>
 			<locationURI>PARENT-6-PROJECT_LOC/Middlewares/ST/STM32_WPAN/utilities/otp.c</locationURI>
-		</link>
-		<link>
-			<name>Middlewares/STM32_WPAN/p2p_stm.c</name>
-			<type>1</type>
-			<locationURI>PARENT-6-PROJECT_LOC/Middlewares/ST/STM32_WPAN/ble/svc/Src/p2p_stm.c</locationURI>
 		</link>
 		<link>
 			<name>Middlewares/STM32_WPAN/shci.c</name>
@@ -267,9 +332,19 @@
 			<locationURI>PARENT-1-PROJECT_LOC/Core/Src/app_entry.c</locationURI>
 		</link>
 		<link>
+			<name>Application/User/Core/app_freertos.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/Core/Src/app_freertos.c</locationURI>
+		</link>
+		<link>
 			<name>Application/User/Core/bme680.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/Core/Src/bme680.c</locationURI>
+		</link>
+		<link>
+			<name>Application/User/Core/freertos_port.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/Core/Src/freertos_port.c</locationURI>
 		</link>
 		<link>
 			<name>Application/User/Core/hw_timerserver.c</name>
@@ -297,6 +372,11 @@
 			<locationURI>PARENT-1-PROJECT_LOC/Core/Src/stm32wbxx_hal_msp.c</locationURI>
 		</link>
 		<link>
+			<name>Application/User/Core/stm32wbxx_hal_timebase_tim.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/Core/Src/stm32wbxx_hal_timebase_tim.c</locationURI>
+		</link>
+		<link>
 			<name>Application/User/Core/stm32wbxx_it.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/Core/Src/stm32wbxx_it.c</locationURI>
@@ -310,6 +390,16 @@
 			<name>Application/User/STM32_WPAN/App/app_ble.c</name>
 			<type>1</type>
 			<locationURI>PARENT-1-PROJECT_LOC/STM32_WPAN/App/app_ble.c</locationURI>
+		</link>
+		<link>
+			<name>Application/User/STM32_WPAN/App/dis_app.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/STM32_WPAN/App/dis_app.c</locationURI>
+		</link>
+		<link>
+			<name>Application/User/STM32_WPAN/App/hrs_app.c</name>
+			<type>1</type>
+			<locationURI>PARENT-1-PROJECT_LOC/STM32_WPAN/App/hrs_app.c</locationURI>
 		</link>
 		<link>
 			<name>Application/User/STM32_WPAN/App/p2p_server_app.c</name>
