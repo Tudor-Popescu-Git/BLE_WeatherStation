@@ -633,6 +633,7 @@ static uint32_t HIST_Oldest(void)
 
 static void HIST_Add(int16_t t100, uint16_t rh100, uint32_t p_pa)
 {
+	osMutexAcquire(HistMtx, OS_FOREVER);
   HistRec_t *r = &HistBuf[HistNextSeq % HIST_CAPACITY];
 
   r->seq   = HistNextSeq;
@@ -641,6 +642,7 @@ static void HIST_Add(int16_t t100, uint16_t rh100, uint32_t p_pa)
   r->rh100 = rh100;
   r->p_pa  = p_pa;
   HistNextSeq++;
+  osMutexRelease(HistMtx);
 }
 
 static void HIST_Init(void)
