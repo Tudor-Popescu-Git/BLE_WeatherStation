@@ -38,7 +38,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "weather_app.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -391,7 +391,7 @@ void APP_BLE_Init(void)
   HRSAPP_Init();
 
   /* USER CODE BEGIN APP_BLE_Init_3 */
-
+  WEATHER_Init();
   /* USER CODE END APP_BLE_Init_3 */
 
   /**
@@ -458,7 +458,7 @@ SVCCTL_UserEvtFlowStatus_t SVCCTL_App_Notification(void *p_Pckt)
                     p_disconnection_complete_event->Reason);
 
         /* USER CODE BEGIN EVT_DISCONN_COMPLETE_2 */
-
+        WEATHER_OnDisconnect();
         /* USER CODE END EVT_DISCONN_COMPLETE_2 */
       }
 
@@ -691,7 +691,7 @@ SVCCTL_UserEvtFlowStatus_t SVCCTL_App_Notification(void *p_Pckt)
         /* USER CODE BEGIN BLUE_EVT */
         case ACI_GATT_ATTRIBUTE_MODIFIED_VSEVT_CODE:
         case ACI_GATT_TX_POOL_AVAILABLE_VSEVT_CODE:
-//          HIST_OnGattEvent(p_blecore_evt->ecode, p_blecore_evt->data);
+            WEATHER_OnGattEvent(p_blecore_evt->ecode, p_blecore_evt->data);
           break;
         /* USER CODE END BLUE_EVT */
       }
