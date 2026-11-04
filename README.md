@@ -1,6 +1,6 @@
 # BLE Weather Station — handover for a new chat
 
-_Updated 2026-11-01 (previous version 2026-10-09). Covers only the weather-station project. Paste or attach this file at the start of the new chat._
+_Updated 2026-11-04 (previous version 2026-11-01). Paste or attach this file at the start of the new chat._
 
 Items marked **(to confirm)** were not verified when this file was written.
 
@@ -9,16 +9,19 @@ Items marked **(to confirm)** were not verified when this file was written.
 ## 1. Rules for the assistant (set by the owner, still in force)
 
 1. Altered files are given **only as downloads**, and only after the owner explicitly agrees to an attachment.
-2. Read-only access to files and repos. **No commits, pushes, branch actions or any interaction outside the chat.**
+2. Read-only access to files and repos. **No commits, pushes, branch actions or any interaction outside the chat.** Never write to the Claude project.
 3. Nothing left behind when the chat closes. Never change the project layout (instructions, attached files, settings).
 4. Critical but not to a fault. No metaphors, no idioms, no figures of speech. Plain English.
 5. Exceptions only when the owner explicitly says so.
+6. If a search result is unclear, search again instead of giving a vague answer.
 
 Working habits that helped:
 - **Say what is verified and what is a guess.**
 - **Read the actual files and logs before answering.**
 - **Check the CubeMX diff after every regeneration.**
-- Keep feedback short: the main point plus one fix, not long lists.
+- **Keep feedback short:** the main point plus one fix, not long lists. The owner asked for this explicitly.
+- Don't assume the owner should already know something. Explain it once, briefly, without "you already met this" framing.
+- The JD PDF in the project is marked "Sensitivity: C1-Internal" and contains a recruiter's contact. Read only; never copy it or send it anywhere.
 
 ---
 
@@ -27,18 +30,19 @@ Working habits that helped:
 | Item | Details |
 |---|---|
 | Board | **P-NUCLEO-WB55** (Nucleo-68, MB1355, STM32WB55RG). Cortex-M4 64 MHz (application) + Cortex-M0+ 32 MHz (radio, closed ST firmware). On-board ST-LINK. User manual: UM2435 |
-| Board history | Given away as a gift, returned 2026-11-01. Works (see section 4, "Check after return") |
-| Wireless firmware | FUS v2.2.0, BLE stack **full** v1.24.0.3. Do not touch. (Zephyr BLE would need the "HCI only" binary instead; see section 8) |
-| Cube package | STM32Cube_FW_WB V1.24.0. Project lives under `…/Projects/P-NUCLEO-WB55.Nucleo/Applications/BLE/BLE_WeatherStation`, project name `BLE_p2pServer` |
-| Sensor in use | **BME680** on I2C1 (PB8/PB9), address `0x76`. Generic purple 6-pin breakout, printed only "BME680" (no maker name). Header soldered (confirmed 2026-11-01). Wiring below |
+| Board history | Given away as a gift, returned 2026-11-01. Works |
+| Wireless firmware | FUS v2.2.0, BLE stack **full** v1.24.0.3 (**confirmed from the board's log 2026-11-02**). Do not touch. (Zephyr BLE would need the "HCI only" binary instead; see section 8) |
+| Cube package | STM32Cube_FW_WB V1.24.0. Project under `…/Projects/P-NUCLEO-WB55.Nucleo/Applications/BLE/BLE_WeatherStation`, project name `BLE_p2pServer` |
+| Sensor in use | **BME680** on I2C1 (PB8/PB9), address `0x76`. Generic purple 6-pin breakout, printed only "BME680". Header soldered 2026-11-01. Wiring below |
 | Sensor not used | BH1750FVI: not wired, all code removed on purpose |
 | Power | USB battery or PC USB |
 | PC | Windows 11, STM32CubeIDE, STM32CubeProgrammer, Sourcetree, PuTTY (USART1, 115200 8N1). WSL2 with Ubuntu 26.04 for Zephyr (section 9) |
 | Phone | Android, nRF Connect for Mobile |
-| Other boards owned | Raspberry Pi 4, Raspberry Pi Pico 2 WH (not part of this project so far) |
-| Tools | Digital oscilloscope, multimeter |
+| Other boards owned | Raspberry Pi 4, Raspberry Pi Pico 2 WH (not part of this project) |
+| Tools | Digital oscilloscope, multimeter, breadboard |
+| **On order** | **NXP FRDM-RW612** + a second BME680 (DFRobot Fermion SEN0375). See section 8 |
 
-### BME680 wiring (verified on hardware 2026-11-01, direct wires, no breadboard)
+### BME680 wiring on the Nucleo (verified on hardware 2026-11-01, direct wires)
 
 | Wire | Nucleo socket | Signal | BME680 pin |
 |---|---|---|---|
@@ -49,28 +53,15 @@ Working habits that helped:
 | Black | CN6:6 | GND | SDO (I2C address 0x76) |
 | Orange | CN6:2 | IOREF (3V3) | CS (I2C mode) |
 
-- **Breakout pin order** (as printed, from one end): VCC, GND, SCL, SDA, SDO, CS. Labels are SCL/SDA (other breakouts may print SCK/SDI). A replacement breakout may have a different order: always follow the printed labels.
-- At the sensor end, the six wires sit in **one 6-pin connector housing**, taped together. Keep teal on VCC when plugging it on.
-- **Where the sockets are:** with the ST-LINK USB connector at the top, CN6 is the left inner (female) header, pin 1 at the top. CN5 is the upper part of the right inner header, pin 10 (D15) at the top end. The pin names are also printed on the board next to the headers; check them before connecting. (Based on UM2435 and the standard Nucleo-64 layout; the printed labels are the final check.)
+- **Breakout pin order** (as printed, from one end): VCC, GND, SCL, SDA, SDO, CS. A different breakout (for example the SEN0375) may have a different order and labels: always follow the printed labels.
+- At the sensor end, the six wires sit in **one 6-pin connector housing**, taped together. Keep teal on VCC.
+- **Where the sockets are:** with the ST-LINK USB connector at the top, CN6 is the left inner header, pin 1 at the top. CN5 is the upper part of the right inner header, pin 10 (D15) at the top end. Check the printed pin names before connecting.
 - Teal and orange are 3V3; white and black are GND.
-- **Never** use CN6:5 (5V) or CN5:8 (AVDD = VDDA, the MCU's analog supply) for the sensor.
-- CN6:2 (IOREF) is used only for CS, a logic input. Measure it before use: it should read about 3.3 V.
-- There is no 3V3 on CN5 or CN9. Other 3V3 pins: ST morpho CN7:16 (3V3) and CN7:12 (3V3 IOREF), male pins.
-- Sensor header: soldered (2026-11-01). The earlier I2C errors (`0x20` timeout, `0x04` NACK) were caused by the unsoldered header.
+- **Never** use CN6:5 (5V) or CN5:8 (AVDD = VDDA) for the sensor.
+- CN6:2 (IOREF) is used only for CS. Measure it before use: about 3.3 V.
+- No 3V3 on CN5 or CN9. Other 3V3 pins: ST morpho CN7:16 (3V3) and CN7:12 (3V3 IOREF), male pins.
+- The earlier I2C errors (`0x20` timeout, `0x04` NACK) were caused by the unsoldered header.
 - Before powering up: continuity check 3V3 to GND (no beep) and SDA to SCL (no beep).
-
-**Arduino headers used (from UM2435 Table 10)**
-
-| Header | Pin | Name | Note |
-|---|---|---|---|
-| CN6 | 2 | 3V3 (IOREF) | |
-| CN6 | 4 | 3V3 | |
-| CN6 | 5 | 5V | not for the sensor |
-| CN6 | 6, 7 | GND | |
-| CN5 | 7 | GND | |
-| CN5 | 8 | AVDD (VDDA) | not for the sensor |
-| CN5 | 9 | D14 / PB9 | I2C1_SDA |
-| CN5 | 10 | D15 / PB8 | I2C1_SCL |
 
 **Board LEDs (UM2435 §7.6)**
 
@@ -81,26 +72,20 @@ Working habits that helped:
 | LD5 red | Power OK. Normal |
 | LD6 red/green | ST-LINK status. Normal |
 
-**Buttons**
+**Buttons**: SW1 (PC4) P2P demo notification; SW2 (PD0) connection-parameter update (does **not** clear pairing); SW3 (PD1) free.
 
-| Button | Function |
-|---|---|
-| SW1 (PC4) | P2P demo notification |
-| SW2 (PD0) | Connection-parameter update request (it does **not** clear pairing) |
-| SW3 (PD1) | Free |
-
-PuTTY input: the text `SW1`, `SW2` or `SW3` simulates the button. Any other text gives "NOT RECOGNIZED COMMAND".
+PuTTY: typing `SW1`, `SW2` or `SW3` simulates the button; anything else gives "NOT RECOGNIZED COMMAND". **Don't right-click in PuTTY**: it pastes the clipboard to the board. If lines step to the right, enable "Implicit CR in every LF".
 
 ---
 
-## 3. Repository state (checked 2026-10-30)
+## 3. Repository state
 
-Repo: `Tudor-Popescu-Git/BLE_WeatherStation`. Earlier notes say private, but it could be cloned without credentials on 2026-10-14 and 2026-10-30 (through a proxy that may add access). **Visibility: owner to check on GitHub.**
+Repo: `Tudor-Popescu-Git/BLE_WeatherStation`. **Visibility (public or private): owner to check on GitHub (to confirm).**
 
 | Branch | State |
 |---|---|
-| `main` (on GitHub) | **Verified firmware, sequencer version.** Head `a723e44` (README fix). Code commit `977348c` "Add history buffer and history BLE service, harden measurement path". |
-| `freertos-port` (on GitHub) | FreeRTOS port in progress, head `23b6d7d` (2026-10-11). Builds (owner report, warnings not reviewed). **Not tested on hardware.** See section 6 |
+| `main` | **Verified firmware, sequencer version.** Head `a723e44` (README fix). Code commit `977348c` |
+| `freertos-port` | **Head `bce49e3`. Works on hardware (2026-11-02), partially tested.** See section 6 |
 | `feature/bh1750-history` | Deleted |
 
 ---
@@ -109,10 +94,8 @@ Repo: `Tudor-Popescu-Git/BLE_WeatherStation`. Earlier notes say private, but it 
 
 **Measurement**
 - Period `ENV_PERIOD_S` = 10 s for bench testing; use 600 for real use.
-- The first measurement runs at start-up.
-- Each cycle: trigger the BME680, wait 100 ms, read.
+- First measurement at start-up. Each cycle: trigger the BME680, wait 100 ms, read.
 - Sequencer tasks: `ENV_TRIGGER`, `ENV_READ`, `HIST_SEND`.
-- Timer-server timers: a repeating period timer and a 100 ms single-shot.
 - Advertises as **P2PSRV1**, address `00:80:E1:26:C1:4B`.
 
 **Environmental Sensing Service (ESS, 0x181A)**, read + notify, little-endian:
@@ -122,8 +105,6 @@ Repo: `Tudor-Popescu-Git/BLE_WeatherStation`. Earlier notes say private, but it 
 | Temperature | 0x2A6E | sint16, 0.01 °C |
 | Humidity | 0x2A6F | uint16, 0.01 % |
 | Pressure | 0x2A6D | uint32, 0.1 Pa |
-
-Each value is sent with one `aci_gatt_update_char_value` call (2 or 4 bytes), not byte by byte.
 
 **History buffer**
 - RAM ring buffer, `HIST_CAPACITY` 2016 records × 16 bytes ≈ 32 KB. Lost on reset.
@@ -137,8 +118,8 @@ Each value is sent with one `aci_gatt_update_char_value` call (2 or 4 bytes), no
   | 10–11 | Humidity, 0.01 % |
   | 12–15 | Pressure, Pa (in the end marker: the next sequence number) |
 
-- **Uptime** comes from `HAL_GetTick`. It is only valid while low power is off (`CFG_LPM_SUPPORTED` 0); needs an RTC-based count before low power.
-- **Reboot detection:** if the marker's next sequence is lower than the phone's last one, the board restarted, so request from 0.
+- Uptime comes from `HAL_GetTick`; valid only while low power is off.
+- Reboot detection: if the marker's next sequence is lower than the phone's last one, the board restarted, so request from 0.
 
 **History service** `7a1e0001-5c2b-4f6e-9b3a-1d2c3e4f5a6b`
 
@@ -147,195 +128,152 @@ Each value is sent with one `aci_gatt_update_char_value` call (2 or 4 bytes), no
 | Control | `7a1e0003-…` | Write, exactly 4 bytes: uint32 LE, first sequence wanted |
 | Data | `7a1e0004-…` | Notify, one 16-byte record per notification |
 
-- In the code, the value handle is the characteristic handle + 1, and the CCCD is the characteristic handle + 2.
-- A request is ignored until notifications are enabled on `…0004…`.
-- After a disconnect the board forgets that setting: **re-enable after every reconnect.**
-- A start number beyond the end is clamped, so only the marker is sent.
+- Value handle = characteristic handle + 1; CCCD = characteristic handle + 2.
+- A request is ignored until notifications are enabled on `…0004…`. **Re-enable after every reconnect.**
 - Streaming sends until `BLE_STATUS_INSUFFICIENT_RESOURCES` (0x64), then resumes on `ACI_GATT_TX_POOL_AVAILABLE`.
-- Disconnect stops streaming.
 
 **Test in nRF Connect**
 1. Enable notifications on `…0004…`.
-2. Write a byte array to `…0003…`. The first byte is the lowest: start 157 is `9D-00-00-00`, all records is `00-00-00-00`, marker only is `FF-FF-FF-FF`.
+2. Write a byte array to `…0003…`, lowest byte first: start 157 is `9D-00-00-00`, all is `00-00-00-00`, marker only is `FF-FF-FF-FF`.
 3. PuTTY shows `HIST: request, sending seq A to B (N records)` and `HIST: done`.
 
-**Verified on hardware (2026-10-04)**
-- Partial request from 157: 30 records, then the marker.
-- Full transfers of 275 and 329 records, with no gaps. The overlapping records were byte-identical.
-- Request after reconnect.
-- Restart detection after a reflash.
-- Disconnect during a transfer, and resuming through a 355 s pause, using a temporary test build that is not in the repo.
+**Verified on hardware (2026-10-04)**: partial request, full transfers of 275 and 329 records with no gaps, request after reconnect, restart detection, disconnect and resume during a transfer.
 
-**Check after return (2026-11-01)**
-- Verified: connects in nRF Connect; ESS and history service present; ESS readings 24.06 °C, 47.83 %, 101528 Pa; notifications enabled on all three ESS characteristics.
-- Not yet done: history transfer test; reading FUS and BLE stack versions in STM32CubeProgrammer **(to confirm)**.
-
-**Not verified on hardware**
-- The ring buffer wrapping at 2016 records (off-target test only).
-- Whether the buffer-full wait path is ever reached on the board.
-- Long runs at 600 s.
-- Low power.
+**Not verified**: ring-buffer wrap at 2016 records on the board, long runs at 600 s, low power.
 
 ---
 
 ## 5. Things learned about the platform
 
 **How the two cores talk**
-- Shared RAM `RAM_SHARED` (10 KB at `0x20030000`), the IPCC channels and HSEM.
-- The M4 starts the M0+ by setting the boot bit (C2BOOT). This can't be undone, and the M4 can't halt the M0+.
-- A debugger halt of the M4 leaves the M0+ running the link.
+- Shared RAM `RAM_SHARED` (10 KB at `0x20030000`), IPCC channels and HSEM.
+- The M4 starts the M0+ (C2BOOT); this can't be undone. A debugger halt of the M4 leaves the M0+ running.
 - "ACI" = Application Command Interface, ST's command set for the radio core.
 
-**The old scheduler**
-- The sequencer (`UTIL_SEQ_*`) is cooperative: one stack, and each task runs to completion.
-- Tasks that send BLE commands had to be listed in `CFG_Task_Id_With_HCI_Cmd_t`. They are paused while a command is pending.
+**BLE event path in the FreeRTOS build (traced 2026-11-03)**
 
-**In the FreeRTOS version (ST-generated)**
-- SHCI, HCI-event and advertising threads.
-- Events from the M0+ wake a thread with `osThreadFlagsSet`.
-- Command replies use a semaphore (`SemHciId`).
-- One command at a time is enforced by the mutex `MtxHciId` (in `BLE_StatusNot`).
-- Interrupts that call FreeRTOS functions need priority number ≥ 5 (`configLIBRARY_MAX_SYSCALL_INTERRUPT_PRIORITY`). IPCC is at 5 and the RTC wake-up at 6, which is correct.
+IPCC interrupt → `hw_ipcc.c` → `tl_mbox.c` → `hci_tl.c` `TlEvtReceived` → `hci_notify_asynch_evt` (sets a thread flag) → `HciUserEvtProcess` thread → `SVCCTL_UserEvtRx` → registered service handlers → `SVCCTL_App_Notification` (in `app_ble.c`) → `WEATHER_OnGattEvent` → thread flags → `HistTask`.
+- `app_conf.h:447` maps `HAL_IPCC_RX_IRQHandler` to `HW_IPCC_Rx_Handler`.
+- **Command path:** `hci_send_req` takes mutex `MtxHciId` (one command at a time), sends, waits on semaphore `SemHciId` for the reply.
+- `SVCCTL_App_Notification` is the application's single entry point for BLE events that no service handler consumed (connect, disconnect, GATT events).
 
-**Debugging**
-- A GDB breakpoint in CubeIDE (Debug + conditional breakpoint) can stop a transfer to inspect variables.
-- After Resume, the send loop continues before the disconnect is processed.
-- The HAL tick may lose the halted time.
+**GATT basics used here**: server (the board) holds services → characteristics → descriptors; CCCD enables notify/indicate; notify has no acknowledgement, indicate has one.
+
+**The 10 `aci_gatt_*` calls in `weather_app.c` (freertos-port)**: `aci_gatt_add_service` (lines 245, 419), `aci_gatt_add_char` (250, 256, 262, 424, 430), `aci_gatt_update_char_value` (282, 497, 518).
+
+**FreeRTOS on this chip**
+- Interrupts that call FreeRTOS functions need priority number ≥ 5. IPCC is 5, RTC wake-up 6: correct.
+- `TOTAL_HEAP_SIZE` 65536. The default 3072 silently stopped the SHCI thread from being created.
 
 ---
 
-## 6. FreeRTOS port (branch `freertos-port`) — status
+## 6. FreeRTOS port (branch `freertos-port`, head `bce49e3`)
 
-**Why it's built this way**
-- With FreeRTOS on, CubeMX (this version) offers only the **Heart Rate** server; P2P Server disappears from the list.
-- So the base is ST's generated Heart Rate + Device Information app.
-- The weather code moves into the owner's own files `STM32_WPAN/App/weather_app.c` and `.h`, which CubeMX never touches.
+**Why it's built this way**: with FreeRTOS on, CubeMX offers only the Heart Rate server, so the base is ST's Heart Rate + DIS app, and the weather code lives in the owner's files `STM32_WPAN/App/weather_app.c` / `.h`, which CubeMX never touches.
 
-**Phase 1 checkpoint passed on hardware (2026-10-07)**
-- The board advertises as **`P2PSR`** (CubeMX limits the name to 5 characters here), address `00:80:E1:26:C1:4B`.
-- It connects and bonds, and shows GATT, GAP, DIS (0x180A) and HRS (0x180D).
-- No heart-rate values are sent, because `HrMeas` is unused. That's fine; the service will be removed.
+**Done (by the owner, 2026-11-02)**
+- Hooks in `app_ble.c` USER CODE blocks:
 
-**Settings that matter (CubeMX → FREERTOS)**
-- `TOTAL_HEAP_SIZE`: now **65536** (`Core/Inc/FreeRTOSConfig.h` at `23b6d7d`). Earlier 24576; the default 3072 silently stopped the SHCI thread from being created, so there was no BLE at all.
-- Malloc-failed hook and stack-overflow check (Option2) are enabled. Their hook functions in `app_freertos.c` turn on LD3 and halt.
-- HAL time base is TIM17 (FreeRTOS uses SysTick).
+  | Line | Block | Code |
+  |---|---|---|
+  | 41 | `Includes` | `#include "weather_app.h"` |
+  | 394 | `APP_BLE_Init_3` | `WEATHER_Init();` |
+  | 461 | `EVT_DISCONN_COMPLETE_2` | `WEATHER_OnDisconnect();` |
+  | 694 | `BLUE_EVT` | `case ACI_GATT_ATTRIBUTE_MODIFIED_VSEVT_CODE:` / `case ACI_GATT_TX_POOL_AVAILABLE_VSEVT_CODE:` → `WEATHER_OnGattEvent(p_blecore_evt->ecode, p_blecore_evt->data); break;` |
 
-**Check after every regeneration**
-1. **SEQUENCER** stays disabled in CubeMX.
-2. These stay excluded from the build: `Utilities/stm32_seq.c`, `Middlewares/STM32_WPAN/p2p_stm.c`, `Application/User/STM32_WPAN/App/p2p_server_app.c`. **Note (2026-10-30):** the committed `STM32CubeIDE/.project` links `p2p_server_app.c` and `stm32_seq.c`, and the committed `.cproject` has no exclusion entries. Check in CubeIDE whether the exclusions exist only locally.
-3. The linked file `weather_app.c` is still in `Application/User/STM32_WPAN/App`.
-4. `app_ble.c` USER CODE is intact. Also: the old `APP_BLE_Key_Button2_Action` still contains `UTIL_SEQ_SetTask` and must be converted or removed.
+- Task priorities changed to `osPriorityBelowNormal` (`weather_app.c` lines 62, 70).
+- `stm32_seq.c`, `p2p_server_app.c` and `p2p_stm.c` excluded from the build (fixes `'CFG_SCH_PRIO_NBR' undeclared`). The exclusions are stored in `STM32CubeIDE/.cproject`, **which should be committed** (to confirm whether it was).
 
-**Thread stack sizes in bytes** (from `app_conf.h`, `main.c` and `weather_app.c` at `23b6d7d`)
+**Verified on hardware (2026-11-02)**
+- Services created with status `0x00`; ESS readings appear every 10 s.
+- `HIST: notifications enabled`, `HIST: request, sending seq 0 to 32 (32 records)`, `HIST: done`.
 
-| Thread | Stack |
-|---|---|
-| SHCI | 2560 |
-| HCI | 5120 |
-| ADV | 2560 |
-| HRS | 2560 |
-| HistTask | 5120 (`128 * 40`, defined in `weather_app.c`) |
-| SensorTask | 5120 (`128 * 40`, defined in `weather_app.c`) |
-| defaultTask | 512 (placeholder; change `osDelay(1)` to `osDelay(osWaitForever)` or reuse it) |
+**Not tested yet**
+1. Count of records received on the phone (should match the log).
+2. Partial request (`9D-00-00-00` or another start inside the range).
+3. Request after reconnect.
+4. Large transfer (about 300 records, about 50 min at 10 s) to exercise the `HF_TXPOOL` path.
+5. Disconnect during a transfer.
+6. LD3 stays off during all of the above.
 
-**Target design for `weather_app.c`**
+Merge into `main` only when the results match `main`.
 
-| Part | Behaviour |
-|---|---|
-| `SensorTask` | `if (ENV_Trigger()==HAL_OK){ osDelay(100); ENV_Read(); }`, then `osDelayUntil` the next period (1 tick = 1 ms) |
-| `HistTask` | Waits on thread flags `HF_REQUEST` (0x01), `HF_TXPOOL` (0x02), `HF_DISC` (0x04). On a request it calls `HIST_StartRequest(HistReqFrom)`, then `HIST_SendSome()` (the old send body, unchanged logic) |
-| `WEATHER_OnGattEvent(ecode, p_data)` | Runs in ST's HCI thread. **Only** sets state and flags. A control write stores `HistReqFrom` and sets `HF_REQUEST`; TX pool available sets `HF_TXPOOL` |
-| `WEATHER_OnDisconnect()` | Sets `HistNotifyOn = 0` and `HF_DISC` |
-| `WEATHER_Init()` | `ESS_Init(); HIST_Init();` creates mutex `HistMtx`, then `HistTask` and `SensorTask`, both `osPriorityBelowNormal` |
-| Mutex `HistMtx` | Around `HIST_Add`, the `HistNextSeq` read in `HIST_StartRequest`, and each record's oldest-check plus pack. **Never** held during `aci_gatt_update_char_value`. Also protects `UptimeS()`, which both tasks call |
-| Shared flags | `HistNotifyOn`, `HistStreaming` declared `volatile` |
+**Known code issues in `weather_app.c` / `.h`**
+- **Main one:** `HistTask` (line 200) holds `HistMtx` while calling `HIST_SendSome()` (line 478), which calls `aci_gatt_update_char_value`. Fix after the tests: take the mutex only to copy each record, release it, then send.
+- Return values of `osThreadNew` / `osMutexNew` not checked.
+- `weather_app.h` has no include guard and includes `p2p_server_app.h` and `stm32_seq.h`, which are no longer needed.
+- Stale `/* 100 ms */` comment at line 43; stray `_Static_assert(1, …)` at line 82; file headers still say `p2p_server_app.c`.
+- `APP_BLE_Key_Button2_Action` in `app_ble.c` still contains `UTIL_SEQ_SetTask` (to confirm it is gone or unused).
+- Compiler warnings never reviewed.
 
-**Hooks in `app_ble.c` (USER CODE blocks only) — still missing at `23b6d7d`**
+**Check after every CubeMX regeneration**: SEQUENCER stays disabled; the three exclusions above remain; `weather_app.c` is still linked; the `app_ble.c` USER CODE hooks are intact.
 
-Without these, none of the weather code runs.
-
-| Block | Add |
-|---|---|
-| `Includes` | `#include "weather_app.h"` |
-| `APP_BLE_Init_3` | `WEATHER_Init();` (after `HRSAPP_Init()`, before advertising) |
-| `BLUE_EVT` | `WEATHER_OnGattEvent(p_blecore_evt->ecode, p_blecore_evt->data);` for `ACI_GATT_ATTRIBUTE_MODIFIED` and `ACI_GATT_TX_POOL_AVAILABLE` (the old `HIST_OnGattEvent` line is still there, commented out) |
-| `EVT_DISCONN_COMPLETE_2` | `WEATHER_OnDisconnect();` |
-
-**State of `weather_app.c` at `23b6d7d` (checked 2026-10-30)**
-
-The 2026-10-08 blocking list is largely addressed by commit `23b6d7d` (per its message: `WEATHER_Init` and `WEATHER_OnDisconnect` written, `ENV_Trigger`/`ENV_Read` connected to the I2C calls with proper return values, `HistTask` logic with thread flags and mutex). Confirmed by reading the file: `WEATHER_Init` creates `HistMtx` and both tasks; `HistTask` waits on the flags. The return-value change was not re-checked.
-
-Open items:
-- `HistTask` holds `HistMtx` while calling `HIST_SendSome()`, which calls `aci_gatt_update_char_value`. This breaks the design rule above.
-- Return values of `osThreadNew` and `osMutexNew` are not checked.
-- `weather_app.h` has no include guard, and includes `p2p_server_app.h`, `stm32_seq.h`, `main.h`, `ble.h` and others it doesn't need.
-- Stale comments: line 43 says `/* 100 ms */` for the 10 s period; the file headers still say `p2p_server_app.c`.
-- Stray `_Static_assert(1, …)` (line 82), next to the real size check.
-- Compiler warnings never reviewed. Likely causes: the `UptimeS()` low-power `#warning`, unused variables when `APP_DBG_MSG` compiles out, a missing `bme680.h` include, leftover includes.
-
-**Retest when it builds (same as `main`)**
-1. PuTTY shows ESS and HIST service creation with status `0x00`. The limits are fine: 8 services and 68 attributes allowed, about 6 and 40 used.
-2. ESS values update every 10 s.
-3. Full transfer `00000000`.
-4. Partial request (`9D000000`) and request after reconnect.
-5. Disconnect during a transfer (GDB breakpoint).
-6. LD3 stays off.
-
-Merge into `main` only when the results match.
-
-**Later, optional**
-- Remove HRS and DIS. That should allow a longer advertising name.
-- FreeRTOS tickless idle and low power.
+**Later, optional**: remove HRS and DIS (allows a longer advertising name than `P2PSR`); tickless idle and low power.
 
 ---
 
 ## 7. Open work, independent of FreeRTOS
 
-1. **Ring-buffer wrap test.** Recommended: a temporary build with `HIST_CAPACITY` 20 (it wraps in about 200 s at 10 s). Alternatives: `ENV_PERIOD_S` 1 (about 34 min), or start the sequence counter at about 2000. Pass checks:
-   - `00000000` returns only the newest 20 records, starting at next − 20.
-   - A request for an overwritten sequence starts at the oldest record still kept.
-   - A request inside the kept range starts exactly there.
-2. **Phone or gateway side.**
-   - Python + `bleak`: runs on the Windows PC (needs Bluetooth on the PC) or on the Raspberry Pi 4 as a gateway that stores records and serves them over Wi-Fi. Covers Python and embedded Linux.
-   - Or a minimal Android app (Android Studio, Kotlin; Nordic Android BLE Library suggested): scan, connect, enable CCCD, write start, list records, save CSV. No background sync at first.
-   - Either way, find the board by the history service UUID or its address, not by name.
-   - Convert uptime with `time = phone_now − (marker.up_s − rec.up_s)`.
-3. Later: RTC-based uptime plus low power; history in flash (needs flash/radio coordination through ST's semaphore and system commands); current measurement (the Nucleo itself is not low-power).
+1. **Ring-buffer wrap test**: temporary build with `HIST_CAPACITY` 20.
+2. **Phone or gateway side**: Python + `bleak` (Windows PC or Raspberry Pi 4 as gateway), or a minimal Android app. Find the board by the history service UUID. Convert uptime with `time = phone_now − (marker.up_s − rec.up_s)`.
+3. Later: RTC-based uptime plus low power; history in flash; current measurement.
+4. **README split per branch** (`main`, `freertos-port`, and a future Zephyr branch). Offered as downloads; owner has not confirmed.
 
 ---
 
-## 8. Decisions and options
+## 8. New board: NXP FRDM-RW612 (decided 2026-11-04)
 
-**Deliberately undecided (owner's choice, not gaps)**
-- Where the station goes and whether it runs unattended.
-- Cellular modem (no budget now).
+**Why this board**: Wi-Fi 6 + BLE 5.3 + 802.15.4 on one chip, Cortex-M33 at 260 MHz, 1.2 MB SRAM, on-board MCU-Link debugger, Arduino header, supported by Zephyr (Wi-Fi and BLE need `west blobs fetch hal_nxp`). Kit contents: board, quick start guide, USB-C cable. It also has an on-board **P3T1755** I3C/I2C temperature sensor (temperature only), useful for a first Zephyr I2C test with no wiring.
 
-**Hardware: stay on the WB55.** Researched 2026-10-29 to 10-31 (prices are snapshots, excl. VAT):
-- Optional second board for Zephyr + Nordic experience: **nRF54LM20 DK** (DigiKey part `1490-NRF54LM20-DK-ND`, about €38.90) plus **nRF7002 EBII** Wi-Fi 6 expansion board (`1490-NRF7002-EBII-ND`, about €10.40). Both are boards, not solder-on modules (Fanstel WM02C / WT02C40C are modules, not suitable). Nordic's Wi-Fi examples for the EBII are in the nRF Connect SDK. Set the DK's I/O voltage to 3.3 V for the BME680 (nRF Connect Board Configurator); check the EBII's supported voltage first.
-- Pico 2 WH under Zephyr v4.5.0: Wi-Fi supported, **no BLE**. Pi 4 under Zephyr: no peripherals supported. Neither counts as ST/Nordic experience.
+**Order (to confirm: shop, delivery option, and whether the order was placed)**
+- Mouser cart seen 2026-11-04: FRDM-RW612 145.15 lei + DFRobot SEN0375 BME680 82.34 lei = 227.49 lei without VAT. Free delivery at Mouser Romania only above 380 lei.
+- Delivery choices shown: **DDP** FedEx International Priority 130 lei (no payment at the door), or **FCA** UPS Express Saver / DHL Express 90 lei (VAT about 21% plus a courier fee collected at the door). "Bill Recipient" options need the buyer's own courier account: not usable.
+- Alternative compared: DigiKey (board €25.12 without VAT; free delivery from €50, otherwise €18).
+- **Assumed arrival: Tuesday 2026-11-10** (4 working days from 2026-11-04).
 
-**Zephyr on the WB55 (v4.5.0)**
-- Board `nucleo_wb55rg` is supported; `i2c1` is already on PB8/PB9 but defaults to 400 kHz (set 100 kHz in an overlay).
-- Zephyr has its own BME680 driver (`drivers/sensor/bosch/bme680`). The own driver can also be kept and ported to `i2c_write_read_dt()`.
-- BLE under Zephyr needs the **"HCI Only"** radio binary on the M0+ ("full stack" is not compatible since Cube WB 1.13.2). This replaces the current full stack, so do it only deliberately and last. Zephyr without BLE (blinky, BME680 over I2C) works without touching the radio firmware.
+**When the board arrives (planned order)**
+1. Check the kit contents; connect via USB-C to the MCU-Link port; confirm the PC sees it.
+2. Zephyr in WSL: `west blobs fetch hal_nxp`, then build blinky for board `frdm_rw612` (to confirm the exact board name in Zephyr v4.5.0 with `west boards | grep rw612`).
+3. Flashing: MCU-Link with NXP LinkServer, from Windows or from WSL via `usbipd-win` (to confirm the runner).
+4. Read the on-board P3T1755 over I2C.
+5. Connect a BME680 to the Arduino header I2C pins (D14/D15 positions; **check the FRDM-RW612 user manual for the RW612 pin names and the header voltage, 3.3 V expected, before wiring**). Use 3.3 V only.
+6. Port the BLE weather service (ESS first, then history) to Zephyr's Bluetooth API. Later: Wi-Fi.
+
+**SEN0375 notes (to confirm on arrival)**: may need its header pins soldered; its default I2C address may be `0x77` instead of `0x76`. Check the DFRobot wiki and the board's labels. The jumper wires considered (SparkFun PRT-09387) are male-to-male: fine with a breadboard; direct sensor-to-board needs female-to-male.
+
+**Other boards researched and not chosen**: nRF54LM20 DK + nRF7002 EBII, nRF54L15 DK, nRF7002 DK, NUCLEO-WBA55CG / WBA25CE1 / WBA65RI. Pico 2 WH (owned) has Wi-Fi but **no BLE** under Zephyr.
+
+**Zephyr on the WB55 (v4.5.0)**: board `nucleo_wb55rg`; `i2c1` on PB8/PB9 at 400 kHz by default (set 100 kHz in an overlay); Zephyr has its own BME680 driver. BLE needs the **"HCI Only"** radio binary on the M0+, which replaces the current full stack: do it only deliberately.
 
 ---
 
 ## 9. Zephyr environment (set up 2026-10-31)
 
-- WSL2, Ubuntu 26.04. Workspace `~/zephyrproject`, Zephyr **v4.5.0**, west 1.5.0, Python 3.14 venv in `~/zephyrproject/.venv` (worked; Python 3.12 via `uv` is the fallback if packages fail). CMake 4.2.3, dtc 1.7.2.
-- Every new terminal: `source ~/zephyrproject/.venv/bin/activate` then `cd ~/zephyrproject/zephyr`. If `west` is "not found", the venv is not active. Do not `sudo apt install west`.
-- `native_sim` works: `west build -p always -b native_sim samples/hello_world`, then `./build/zephyr/zephyr.exe -stop_at=5`. `-no-rt` runs simulated time as fast as possible.
-- Exercise done: `samples/synchronization` extended with a third thread, `K_MSGQ_DEFINE` queue and `K_MUTEX_DEFINE` mutex. Lessons: define kernel objects statically; the mutex must cover reads as well as writes; keep the locked section short; read compiler warnings.
-- QEMU host tools are not available on native Windows; use WSL. Flashing from WSL: build in WSL, flash `zephyr.hex` from Windows with STM32CubeProgrammer (or pass USB to WSL with `usbipd-win`).
+- WSL2, Ubuntu 26.04. Workspace `~/zephyrproject`, Zephyr **v4.5.0**, west 1.5.0, Python 3.14 venv `~/zephyrproject/.venv`. CMake 4.2.3, dtc 1.7.2.
+- Every new terminal: `source ~/zephyrproject/.venv/bin/activate` then `cd ~/zephyrproject/zephyr`. If `west` is "not found", the venv is not active. Do not `sudo apt install west`. (Suggested: add the `source` line to `~/.bashrc`.)
+- If Python modules are missing (for example `jsonschema`): `west packages pip --install`, and build from `~/zephyrproject/zephyr`.
+- `native_sim`: `west build -p always -b native_sim samples/hello_world`, then `./build/zephyr/zephyr.exe -stop_at=5`. `-no-rt` runs simulated time as fast as possible.
+- Windows path to WSL files: `\\wsl$\Ubuntu\home\<user>\zephyrproject` in File Explorer.
+- Exercise done: `samples/synchronization` extended with a third thread, a `K_MSGQ_DEFINE` queue and a `K_MUTEX_DEFINE` mutex. Lessons: define kernel objects statically; the mutex must cover reads as well as writes; keep the locked section short (no `printk` inside); initialise variables; read compiler warnings.
+- Kconfig: like `FreeRTOSConfig.h` but for the whole OS, with dependencies between options; result in `build/zephyr/.config`; `west build -t menuconfig`. Devicetree describes hardware; boards are adjusted with overlay files.
 
 ---
 
-## 10. Gotchas
+## 10. Interview preparation (Alten Romania, Senior Embedded Software Engineer)
+
+- Date not set yet. Main RTOS in the role: Zephyr. ST and Nordic experience are relevant.
+- Owner background: about 9 years embedded; oscilloscope and logic analyser used 2016–2019; no bootloader work; RTOS experience limited to basics before this project.
+- **Mock interview**: Q1–Q5 done. Continue from **Q6**. Feedback format: short, main point plus one fix.
+- Points to remember from Q1–Q5: use exact API names (`aci_gatt_update_char_value`, not an approximation); describe concrete results from this project (FreeRTOS port, history transfer with flow control, verified on hardware); mutex vs semaphore (ownership, priority inheritance), priority inversion, `volatile` and read-modify-write, ISR-safe queues.
+- CV edits: discussed, not finished.
+
+---
+
+## 11. Gotchas
 
 - **Reflash or reset empties the history buffer.** Mention reflashes when sending logs.
 - **Clear the nRF Connect log before each test**, and send each log with one line saying what it is for.
-- **Don't edit generated code outside USER CODE blocks.** CubeMX overwrites it (for example `a_LocalName` in `app_ble.c`).
-- **In nRF Connect, use the scanner** (Android's Bluetooth settings may not list BLE devices).
-- **nRF Connect caches services for bonded devices.** On 2026-11-01 it showed HRS/DIS (from the FreeRTOS test) while `main` was running. Fix: delete the bond in nRF Connect's BONDED tab and "Forget" the device in Android Bluetooth settings, then reconnect from the scanner.
+- **Don't edit generated code outside USER CODE blocks.**
+- **In nRF Connect, use the scanner.**
+- **nRF Connect caches services for bonded devices.** Fix: delete the bond in nRF Connect's BONDED tab and "Forget" the device in Android Bluetooth settings, then reconnect.
+- At online shops, check the **Incoterms** line (DDP = everything paid at checkout; FCA = VAT and fees paid at the door) and the delivery line on the final checkout page, not the banner.
