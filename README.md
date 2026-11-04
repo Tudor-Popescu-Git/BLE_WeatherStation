@@ -84,8 +84,8 @@ Repo: `Tudor-Popescu-Git/BLE_WeatherStation`. **Visibility (public or private): 
 
 | Branch | State |
 |---|---|
-| `main` | **Verified firmware, sequencer version.** Head `a723e44` (README fix). Code commit `977348c` |
-| `freertos-port` | **Head `bce49e3`. Works on hardware (2026-11-02), partially tested.** See section 6 |
+| `main` | **Verified firmware, sequencer version.** Last code commit `977348c` (later commits change only this README) |
+| `freertos-port` | **Last code commit `bce49e3`. Works on hardware (2026-11-02), partially tested.** See section 6 |
 | `feature/bh1750-history` | Deleted |
 
 ---
@@ -182,7 +182,7 @@ IPCC interrupt → `hw_ipcc.c` → `tl_mbox.c` → `hci_tl.c` `TlEvtReceived` �
   | 694 | `BLUE_EVT` | `case ACI_GATT_ATTRIBUTE_MODIFIED_VSEVT_CODE:` / `case ACI_GATT_TX_POOL_AVAILABLE_VSEVT_CODE:` → `WEATHER_OnGattEvent(p_blecore_evt->ecode, p_blecore_evt->data); break;` |
 
 - Task priorities changed to `osPriorityBelowNormal` (`weather_app.c` lines 62, 70).
-- `stm32_seq.c`, `p2p_server_app.c` and `p2p_stm.c` excluded from the build (fixes `'CFG_SCH_PRIO_NBR' undeclared`). The exclusions are stored in `STM32CubeIDE/.cproject`, **which should be committed** (to confirm whether it was).
+- Build file set (fixes `'CFG_SCH_PRIO_NBR' undeclared`): `STM32CubeIDE/.cproject` excludes `stm32_seq.c` and `p2p_server_app.c` (committed, verified 2026-11-04). `p2p_stm.c` is not linked in `.project` on this branch, so it needs no exclusion.
 
 **Verified on hardware (2026-11-02)**
 - Services created with status `0x00`; ESS readings appear every 10 s.
@@ -206,7 +206,7 @@ Merge into `main` only when the results match `main`.
 - `APP_BLE_Key_Button2_Action` in `app_ble.c` still contains `UTIL_SEQ_SetTask` (to confirm it is gone or unused).
 - Compiler warnings never reviewed.
 
-**Check after every CubeMX regeneration**: SEQUENCER stays disabled; the three exclusions above remain; `weather_app.c` is still linked; the `app_ble.c` USER CODE hooks are intact.
+**Check after every CubeMX regeneration**: SEQUENCER stays disabled; the two `.cproject` exclusions above remain and `p2p_stm.c` is still not linked; `weather_app.c` is still linked; the `app_ble.c` USER CODE hooks are intact.
 
 **Later, optional**: remove HRS and DIS (allows a longer advertising name than `P2PSR`); tickless idle and low power.
 
@@ -276,4 +276,5 @@ Merge into `main` only when the results match `main`.
 - **Don't edit generated code outside USER CODE blocks.**
 - **In nRF Connect, use the scanner.**
 - **nRF Connect caches services for bonded devices.** Fix: delete the bond in nRF Connect's BONDED tab and "Forget" the device in Android Bluetooth settings, then reconnect.
+- **Before switching branches, run `git status`.** A modified `.cproject` carries over to the other branch and can break its build (2026-11-04: a leftover `p2p_stm.c` exclusion caused `undefined reference to P2PS_STM_App_Update_Char` on `main`; fixed with `git restore .cproject`). After switching, press F5 on the project in CubeIDE, then Clean before building.
 - At online shops, check the **Incoterms** line (DDP = everything paid at checkout; FCA = VAT and fees paid at the door) and the delivery line on the final checkout page, not the banner.
